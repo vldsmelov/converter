@@ -2,7 +2,16 @@ from rest_framework import viewsets
 from apps.authn.role_permissions import RoleByMethodPermission
 from .models import UoMCategory, UoM, Item
 from .serializers import UoMCategorySerializer, UoMSerializer, ItemSerializer
+from .models import PackageSpec
+from .serializers import PackageSpecSerializer
 
+class PackageSpecViewSet(viewsets.ModelViewSet):
+    queryset = PackageSpec.objects.select_related("item", "package_uom", "content_uom").all().order_by("-created_at")
+    serializer_class = PackageSpecSerializer
+    permission_classes = [RoleByMethodPermission]
+    read_role = "nsi.package.read"
+    write_role = "nsi.package.write"
+    
 class UoMCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = UoMCategory.objects.all().order_by("code")
     serializer_class = UoMCategorySerializer

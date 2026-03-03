@@ -29,6 +29,9 @@ class Command(BaseCommand):
             ("CM", "Сантиметр", "LENGTH", "0.01", 3),
 
             ("PCS", "Штука", "COUNT", "1", 0),
+            ("BAG", "Мешок", "COUNT", "1", 0),
+            ("CAN", "Банка", "COUNT", "1", 0),
+            ("BOX", "Ящик", "COUNT", "1", 0),
         ]
 
         for code, name, cat, factor, precision in uoms:

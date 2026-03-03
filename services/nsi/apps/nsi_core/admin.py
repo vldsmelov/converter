@@ -1,5 +1,12 @@
 from django.contrib import admin
 from .models import UoMCategory, UoM, Item, ItemPolicy
+from .models import PackageSpec
+
+class PackageSpecInline(admin.TabularInline):
+    model = PackageSpec
+    extra = 0
+    autocomplete_fields = ("package_uom", "content_uom")
+    fields = ("status", "package_uom", "content_qty", "content_uom", "supplier_code", "barcode", "effective_from", "effective_to")
 
 @admin.register(UoMCategory)
 class UoMCategoryAdmin(admin.ModelAdmin):
@@ -24,4 +31,4 @@ class ItemAdmin(admin.ModelAdmin):
     list_display = ("sku", "name", "is_active")
     list_filter = ("is_active",)
     search_fields = ("sku", "name")
-    inlines = [ItemPolicyInline]
+    inlines = [ItemPolicyInline, PackageSpecInline]

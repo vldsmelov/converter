@@ -1,5 +1,23 @@
 from rest_framework import serializers
 from .models import UoMCategory, UoM, Item, ItemPolicy
+from .models import PackageSpec
+
+class PackageSpecSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PackageSpec
+        fields = [
+            "id",
+            "item",
+            "status",
+            "package_uom",
+            "content_qty",
+            "content_uom",
+            "supplier_code",
+            "barcode",
+            "effective_from",
+            "effective_to",
+        ]
+
 
 class UoMCategorySerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,10 +38,11 @@ class ItemPolicySerializer(serializers.ModelSerializer):
 
 class ItemSerializer(serializers.ModelSerializer):
     policy = ItemPolicySerializer()
+    packages = PackageSpecSerializer(many=True, read_only=True)
 
     class Meta:
         model = Item
-        fields = ["id", "sku", "name", "is_active", "policy"]
+        fields = ["id", "sku", "name", "is_active", "policy", "packages"]
 
     def create(self, validated_data):
         policy_data = validated_data.pop("policy")
