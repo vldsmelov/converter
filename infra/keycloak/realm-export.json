@@ -43,7 +43,7 @@
         "nsi.ping",
         "documents.ping",
         "conversion.ping",
-
+        "conversion.convert",
         "nsi.uom.read",
         "nsi.uom.write",
         "nsi.item.read",

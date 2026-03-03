@@ -113,6 +113,8 @@ services:
     command: >
       sh -c "python manage.py migrate &&
             python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./services/documents:/app
 
   documents:
     build: ./services/documents
@@ -122,7 +124,12 @@ services:
       DJANGO_DEBUG: "1"
       ALLOWED_HOSTS: "*"
       KEYCLOAK_ISSUER: http://localhost:8080/realms/uom
-      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs   
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
+      CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      CONVERSION_BASE_URL: http://conversion:8000
+      KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/token
+      S2S_CLIENT_ID: documents-service
+      S2S_CLIENT_SECRET: 0W8cjpHVNz9VC1Km0jQMIOSgPlbZcAV2
     ports:
       - "8002:8000"
     depends_on:
@@ -131,11 +138,41 @@ services:
     command: >
       sh -c "python manage.py migrate &&
              python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./services/documents:/app
+
+  documents_worker:
+    build: ./services/documents
+    environment:
+      DJANGO_SECRET_KEY: ${DOCS_DJANGO_SECRET_KEY:-dev-secret}
+      DATABASE_URL: postgres://documents:documents@documents_db:5432/documents
+      DJANGO_DEBUG: "1"
+      ALLOWED_HOSTS: "*"
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom
+      KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
+      CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
+      CONVERSION_BASE_URL: http://conversion:8000
+      KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/token
+      S2S_CLIENT_ID: documents-service
+      S2S_CLIENT_SECRET: 0W8cjpHVNz9VC1Km0jQMIOSgPlbZcAV2
+    depends_on:
+      documents_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "python manage.py migrate &&
+            celery -A documents_service worker -l info"
+    volumes:
+      - ./services/documents:/app
 
   conversion:
     build: ./services/conversion
     environment:
       REDIS_URL: redis://redis:6379/0
+      NSI_BASE_URL: http://nsi:8000
       KEYCLOAK_ISSUER: http://localhost:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
     ports:
