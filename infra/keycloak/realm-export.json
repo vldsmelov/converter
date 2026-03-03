@@ -1,0 +1,36 @@
+{
+  "realm": "uom",
+  "enabled": true,
+
+  "roles": {
+    "realm": [
+      { "name": "nsi.ping" },
+      { "name": "documents.ping" },
+      { "name": "conversion.ping" }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "uom-cli",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["*"],
+      "webOrigins": ["*"]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "operator",
+      "enabled": true,
+      "credentials": [
+        { "type": "password", "value": "operator", "temporary": false }
+      ],
+      "realmRoles": ["nsi.ping", "documents.ping", "conversion.ping"]
+    }
+  ]
+}
