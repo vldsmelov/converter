@@ -18,6 +18,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "apps.authn",
+    "apps.nsi_core",
 ]
 
 REST_FRAMEWORK = {
