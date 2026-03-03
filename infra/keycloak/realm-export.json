@@ -6,7 +6,16 @@
     "realm": [
       { "name": "nsi.ping" },
       { "name": "documents.ping" },
-      { "name": "conversion.ping" }
+      { "name": "conversion.ping" },
+
+      { "name": "nsi.uom.read" },
+      { "name": "nsi.uom.write" },
+      { "name": "nsi.item.read" },
+      { "name": "nsi.item.write" },
+      { "name": "nsi.package.read" },
+      { "name": "nsi.package.write" },
+      { "name": "nsi.rule.read" },
+      { "name": "nsi.rule.write" }
     ]
   },
 
@@ -30,7 +39,20 @@
       "credentials": [
         { "type": "password", "value": "operator", "temporary": false }
       ],
-      "realmRoles": ["nsi.ping", "documents.ping", "conversion.ping"]
+      "realmRoles": [
+        "nsi.ping",
+        "documents.ping",
+        "conversion.ping",
+
+        "nsi.uom.read",
+        "nsi.uom.write",
+        "nsi.item.read",
+        "nsi.item.write",
+        "nsi.package.read",
+        "nsi.package.write",
+        "nsi.rule.read",
+        "nsi.rule.write"
+      ]
     }
   ]
 }

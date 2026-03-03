@@ -1,7 +1,7 @@
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from django.db import models
-
+import uuid
 
 class UoMCategory(models.Model):
     code = models.CharField(max_length=32, unique=True)  # MASS/VOLUME/LENGTH/COUNT
@@ -94,3 +94,76 @@ class PackageSpec(models.Model):
 
     def __str__(self):
         return f"{self.item.sku}: 1 {self.package_uom.code} = {self.content_qty} {self.content_uom.code}"
+
+
+class RuleType(models.TextChoices):
+    DENSITY = "density", "Density (mass<->volume)"
+    KG_PER_M = "kg_per_m", "Kg per meter (mass<->length)"
+    PCS_WEIGHT = "pcs_weight", "Piece weight (count<->mass)"
+    CUSTOM_EXPR = "custom_expr", "Custom expression"
+
+class ConversionRule(models.Model):
+    logical_id = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+    version = models.PositiveIntegerField(default=1)
+    supersedes = models.ForeignKey("self", null=True, blank=True, on_delete=models.PROTECT, related_name="superseded_by")
+
+    item = models.ForeignKey(Item, null=True, blank=True, on_delete=models.CASCADE, related_name="conversion_rules")
+
+    from_category = models.ForeignKey(UoMCategory, on_delete=models.PROTECT, related_name="rules_from")
+    to_category = models.ForeignKey(UoMCategory, on_delete=models.PROTECT, related_name="rules_to")
+
+    rule_type = models.CharField(max_length=32, choices=RuleType.choices)
+
+    # применимость: все ключи должны совпасть с context
+    conditions = models.JSONField(default=dict, blank=True)
+    # параметры формулы
+    params = models.JSONField(default=dict)
+
+    priority = models.IntegerField(default=0)
+    status = models.CharField(max_length=16, choices=RefStatus.choices, default=RefStatus.DRAFT)
+    effective_from = models.DateField(null=True, blank=True)
+    effective_to = models.DateField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["item", "status"]),
+            models.Index(fields=["logical_id", "version"]),
+            models.Index(fields=["status", "from_category", "to_category"]),
+        ]
+
+    def clean(self):
+        if self.effective_from and self.effective_to and self.effective_from > self.effective_to:
+            raise ValidationError({"effective_to": "effective_to must be >= effective_from"})
+
+        # базовая проверка на соответствие rule_type категориям:
+        fc = self.from_category.code if self.from_category_id else None
+        tc = self.to_category.code if self.to_category_id else None
+
+        if self.rule_type == RuleType.DENSITY:
+            if set([fc, tc]) != set(["MASS", "VOLUME"]):
+                raise ValidationError("DENSITY requires MASS<->VOLUME categories")
+            if "density_kg_per_l" not in self.params:
+                raise ValidationError("DENSITY params must contain density_kg_per_l")
+        elif self.rule_type == RuleType.KG_PER_M:
+            if set([fc, tc]) != set(["MASS", "LENGTH"]):
+                raise ValidationError("KG_PER_M requires MASS<->LENGTH categories")
+            if "kg_per_m" not in self.params:
+                raise ValidationError("KG_PER_M params must contain kg_per_m")
+        elif self.rule_type == RuleType.PCS_WEIGHT:
+            if set([fc, tc]) != set(["COUNT", "MASS"]):
+                raise ValidationError("PCS_WEIGHT requires COUNT<->MASS categories")
+            if "kg_per_pc" not in self.params:
+                raise ValidationError("PCS_WEIGHT params must contain kg_per_pc")
+
+    def save(self, *args, **kwargs):
+        # Версионирование: если это новая запись и есть supersedes — наследуем logical_id и увеличиваем version
+        if self._state.adding and self.supersedes_id:
+            self.logical_id = self.supersedes.logical_id
+            self.version = self.supersedes.version + 1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        scope = self.item.sku if self.item_id else "GLOBAL"
+        return f"{scope} {self.rule_type} v{self.version} ({self.from_category.code}<->{self.to_category.code}) [{self.status}]"

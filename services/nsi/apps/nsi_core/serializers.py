@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import UoMCategory, UoM, Item, ItemPolicy
 from .models import PackageSpec
+from .models import ConversionRule
 
 class PackageSpecSerializer(serializers.ModelSerializer):
     class Meta:
@@ -63,3 +64,25 @@ class ItemSerializer(serializers.ModelSerializer):
             policy.save()
 
         return instance
+
+class ConversionRuleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ConversionRule
+        fields = [
+            "id",
+            "logical_id",
+            "version",
+            "supersedes",
+            "item",
+            "from_category",
+            "to_category",
+            "rule_type",
+            "conditions",
+            "params",
+            "priority",
+            "status",
+            "effective_from",
+            "effective_to",
+            "created_at",
+        ]
+        read_only_fields = ["logical_id", "version", "created_at"]
