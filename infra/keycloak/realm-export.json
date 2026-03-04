@@ -123,6 +123,28 @@
         "nsi.item.read",
         "nsi.rule.read"
       ]
+    },
+    {
+      "username": "clerk",
+      "enabled": true,
+      "email": "clerk@test.test",
+      "emailVerified": true,
+      "firstName": "Clerk",
+      "lastName": "Documents",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "clerk",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "documents.ping",
+        "documents.invoice.read",
+        "documents.invoice.write",
+        "documents.invoice.calculate",
+        "documents.invoice.generate"
+      ]
     }
   ]
 }

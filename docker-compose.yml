@@ -182,6 +182,22 @@ services:
       redis:
         condition: service_healthy
 
+  e2e:
+    build: ./services/e2e
+    profiles: ["test"]
+    environment:
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: uom
+      KEYCLOAK_CLIENT_ID: uom-cli
+      NSI_URL: http://nsi:8000
+      DOCUMENTS_URL: http://documents:8000
+    depends_on:
+      - keycloak
+      - nsi
+      - documents
+      - documents_worker
+      - conversion
+
 volumes:
   keycloak_db:
   nsi_db:
