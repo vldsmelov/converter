@@ -1,34 +1,90 @@
-from rest_framework import viewsets
+from django.http import FileResponse, Http404
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import status
 
 from apps.authn.role_permissions import RoleByMethodPermission
-from .models import Invoice
+
+from .models import Invoice, InvoiceFile
 from .serializers import InvoiceSerializer
-from .tasks import calculate_invoice
+from .tasks import calculate_invoice, generate_invoice_outputs
+from .storage import get_minio_client, get_bucket, MinioStream
+
+
+def _realm_roles(request) -> set[str]:
+    return set((getattr(request.user, "claims", {}).get("realm_access") or {}).get("roles") or [])
+
 
 class InvoiceViewSet(viewsets.ModelViewSet):
-    queryset = Invoice.objects.prefetch_related("lines", "lines__converted").all().order_by("-created_at")
+    queryset = (
+        Invoice.objects.prefetch_related("lines", "lines__converted", "files")
+        .all()
+        .order_by("-created_at")
+    )
     serializer_class = InvoiceSerializer
     permission_classes = [RoleByMethodPermission]
+
     read_role = "documents.invoice.read"
     write_role = "documents.invoice.write"
 
     @action(detail=True, methods=["post"], url_path="calculate")
     def calculate(self, request, pk=None):
-        # отдельная роль на запуск расчёта
-        roles = set((getattr(request.user, "claims", {}).get("realm_access") or {}).get("roles") or [])
+        roles = _realm_roles(request)
         if "documents.invoice.calculate" not in roles:
-            return Response({"error": "Missing role: documents.invoice.calculate"}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"error": "Missing role: documents.invoice.calculate"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         inv = self.get_object()
-
-        # достаём bearer token из заголовка
-        auth = request.headers.get("Authorization", "")
-        if not auth.startswith("Bearer "):
-            return Response({"error": "Missing bearer token"}, status=status.HTTP_401_UNAUTHORIZED)
-        token = auth[len("Bearer "):].strip()
+        if inv.status in ("calculating", "generating"):
+            return Response(
+                {"error": f"Invoice is busy (status={inv.status})"},
+                status=status.HTTP_409_CONFLICT,
+            )
 
         task = calculate_invoice.delay(inv.id)
         return Response({"ok": True, "invoice_id": inv.id, "task_id": task.id})
+
+    @action(detail=True, methods=["post"], url_path="generate")
+    def generate(self, request, pk=None):
+        roles = _realm_roles(request)
+        if "documents.invoice.generate" not in roles:
+            return Response(
+                {"error": "Missing role: documents.invoice.generate"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        inv = self.get_object()
+        if inv.status != "calculated":
+            return Response(
+                {"error": f"Invoice must be CALCULATED (now status={inv.status})"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        task = generate_invoice_outputs.delay(inv.id)
+        return Response({"ok": True, "invoice_id": inv.id, "task_id": task.id})
+
+    @action(detail=True, methods=["get"], url_path=r"files/(?P<file_id>\d+)/download")
+    def download_file(self, request, pk=None, file_id=None):
+        inv = self.get_object()
+        try:
+            f = inv.files.get(id=int(file_id))
+        except (InvoiceFile.DoesNotExist, ValueError):
+            raise Http404("File not found")
+
+        client = get_minio_client()
+        bucket = get_bucket()
+
+        resp = client.get_object(bucket, f.object_key)
+        stream = MinioStream(resp)
+
+        response = FileResponse(
+            stream,
+            as_attachment=True,
+            filename=f.file_name,
+            content_type=f.content_type,
+        )
+        if f.size:
+            response["Content-Length"] = str(f.size)
+        return response

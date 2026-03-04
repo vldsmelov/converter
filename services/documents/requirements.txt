@@ -7,3 +7,7 @@ requests==2.32.3
 httpx==0.27.0
 celery==5.4.0
 django-celery-results==2.5.1
+
+minio>=7.2.0,<8
+openpyxl>=3.1.0,<4
+fpdf2>=2.7.0,<3

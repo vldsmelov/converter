@@ -102,19 +102,19 @@ services:
       DATABASE_URL: postgres://nsi:nsi@nsi_db:5432/nsi
       DJANGO_DEBUG: "1"
       ALLOWED_HOSTS: "*"
-      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom
+      # Accept both external (host) and internal (docker) issuer variants
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom,http://keycloak:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
-
     ports:
       - "8001:8000"
     depends_on:
       nsi_db:
         condition: service_healthy
     command: >
-      sh -c "python manage.py migrate &&
-            python manage.py runserver 0.0.0.0:8000"
+      sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
-      - ./services/documents:/app
+      # FIX: монтируем код NSI, а не documents
+      - ./services/nsi:/app
 
   documents:
     build: ./services/documents
@@ -123,7 +123,8 @@ services:
       DATABASE_URL: postgres://documents:documents@documents_db:5432/documents
       DJANGO_DEBUG: "1"
       ALLOWED_HOSTS: "*"
-      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom
+      # Accept both external (host) and internal (docker) issuer variants
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom,http://keycloak:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
       CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
       CONVERSION_BASE_URL: http://conversion:8000
@@ -136,8 +137,7 @@ services:
       documents_db:
         condition: service_healthy
     command: >
-      sh -c "python manage.py migrate &&
-             python manage.py runserver 0.0.0.0:8000"
+      sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - ./services/documents:/app
 
@@ -148,7 +148,8 @@ services:
       DATABASE_URL: postgres://documents:documents@documents_db:5432/documents
       DJANGO_DEBUG: "1"
       ALLOWED_HOSTS: "*"
-      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom
+      # Accept both external (host) and internal (docker) issuer variants
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom,http://keycloak:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
       CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
       CONVERSION_BASE_URL: http://conversion:8000
@@ -163,8 +164,7 @@ services:
       redis:
         condition: service_healthy
     command: >
-      sh -c "python manage.py migrate &&
-            celery -A documents_service worker -l info"
+      sh -c "python manage.py migrate && celery -A documents_service worker -l info"
     volumes:
       - ./services/documents:/app
 
@@ -173,7 +173,8 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       NSI_BASE_URL: http://nsi:8000
-      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom
+      # Accept both external (host) and internal (docker) issuer variants
+      KEYCLOAK_ISSUER: http://localhost:8080/realms/uom,http://keycloak:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
     ports:
       - "8003:8000"

@@ -16,7 +16,10 @@ app = FastAPI(title="conversion-service")
 bearer = HTTPBearer(auto_error=True)
 
 JWKS_URL = os.environ["KEYCLOAK_JWKS_URL"]
-ISSUER = os.environ["KEYCLOAK_ISSUER"]
+
+# KEYCLOAK_ISSUER may be a comma-separated list.
+_ISSUERS_RAW = os.environ["KEYCLOAK_ISSUER"]
+ISSUERS = [p.strip() for p in (_ISSUERS_RAW or "").split(",") if p.strip()]
 NSI_BASE_URL = os.environ["NSI_BASE_URL"].rstrip("/")
 
 jwks_client = PyJWKClient(JWKS_URL)
@@ -38,9 +41,11 @@ def decode_token(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
             token,
             signing_key,
             algorithms=["RS256"],
-            issuer=ISSUER,
-            options={"verify_aud": False},
+            options={"verify_aud": False, "verify_iss": False},
         )
+        iss = claims.get("iss")
+        if ISSUERS and iss not in ISSUERS:
+            raise HTTPException(status_code=401, detail=f"Invalid token issuer: {iss}")
         return claims
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Invalid token: {e}")
@@ -216,8 +221,16 @@ def apply_rule_base_to_base(qty_base: Decimal, from_cat: str, to_cat: str, rule:
     rtype = rule["rule_type"]
     params = rule["params"] or {}
 
+    def _require_decimal(key: str) -> Decimal:
+        if key not in params or params.get(key) is None:
+            raise HTTPException(status_code=422, detail=f"Rule {rtype} missing required param: {key}")
+        try:
+            return d(params.get(key))
+        except Exception:
+            raise HTTPException(status_code=422, detail=f"Rule {rtype} has invalid param {key}: {params.get(key)}")
+
     if rtype == "kg_per_m":
-        kg_per_m = d(params["kg_per_m"])
+        kg_per_m = _require_decimal("kg_per_m")
         if kg_per_m <= 0:
             raise HTTPException(status_code=500, detail="Invalid kg_per_m")
         if from_cat == "MASS" and to_cat == "LENGTH":
@@ -226,7 +239,7 @@ def apply_rule_base_to_base(qty_base: Decimal, from_cat: str, to_cat: str, rule:
             return (qty_base * kg_per_m, {"kg_per_m": str(kg_per_m), "direction": "m->kg"})
 
     if rtype == "density":
-        dens = d(params["density_kg_per_l"])
+        dens = _require_decimal("density_kg_per_l")
         if dens <= 0:
             raise HTTPException(status_code=500, detail="Invalid density_kg_per_l")
         if from_cat == "MASS" and to_cat == "VOLUME":
@@ -235,7 +248,7 @@ def apply_rule_base_to_base(qty_base: Decimal, from_cat: str, to_cat: str, rule:
             return (qty_base * dens, {"density_kg_per_l": str(dens), "direction": "l->kg"})
 
     if rtype == "pcs_weight":
-        kg_per_pc = d(params["kg_per_pc"])
+        kg_per_pc = _require_decimal("kg_per_pc")
         if kg_per_pc <= 0:
             raise HTTPException(status_code=500, detail="Invalid kg_per_pc")
         if from_cat == "COUNT" and to_cat == "MASS":
@@ -281,7 +294,7 @@ async def find_category_path_and_convert(
                 "context": context,
                 "on_date": on_date.isoformat(),
             }
-            resp = await nsi_post(client, token, "/api/v1/rules/match", payload)
+            resp = await nsi_post(client, token, "/api/v1/rules/match/", payload)
             if resp.get("_not_found"):
                 continue
 
