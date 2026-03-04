@@ -60,3 +60,36 @@ Thumbs.db
 # ---------- Local data dirs (если будете маппить volumes в папки) ----------
 data/
 tmp/
+
+# --- Frontend (Vite/React/TS) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.cache/
+frontend/.turbo/
+frontend/.parcel-cache/
+
+# logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/pnpm-debug.log*
+
+# local env files
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
+# TypeScript build info
+frontend/tsconfig.tsbuildinfo
+
+# Generated API types (optional)
+# Если хочешь НЕ хранить сгенерённые файлы и генерить их всегда через npm run gen:
+frontend/src/api/generated/
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from rest_framework import serializers
 
 from .models import Invoice, InvoiceLine, ConvertedLine, InvoiceFile
+from .storage import get_minio_presign_client, get_bucket
 
 
 class ConvertedLineSerializer(serializers.ModelSerializer):
@@ -14,37 +17,31 @@ class InvoiceLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = InvoiceLine
-        fields = [
-            "line_no",
-            "item_id",
-            "qty",
-            "uom_code",
-            "context",
-            "barcode",
-            "supplier_code",
-            "converted",
-        ]
+        fields = ["line_no", "item_id", "qty", "uom_code", "context", "barcode", "supplier_code", "converted"]
 
 
 class InvoiceFileSerializer(serializers.ModelSerializer):
     download_url = serializers.SerializerMethodField()
+    presigned_url = serializers.SerializerMethodField()
 
     class Meta:
         model = InvoiceFile
-        fields = [
-            "id",
-            "file_type",
-            "file_name",
-            "content_type",
-            "size",
-            "created_at",
-            "download_url",
-        ]
+        fields = ["id", "file_type", "file_name", "content_type", "size", "created_at", "download_url", "presigned_url"]
 
     def get_download_url(self, obj: InvoiceFile) -> str:
         request = self.context.get("request")
         path = f"/api/v1/invoices/{obj.invoice_id}/files/{obj.id}/download"
         return request.build_absolute_uri(path) if request else path
+
+    def get_presigned_url(self, obj: InvoiceFile) -> str | None:
+        try:
+            request = self.context.get("request")
+            host = request.get_host() if request else None
+            client = get_minio_presign_client(host)
+            bucket = get_bucket()
+            return client.presigned_get_object(bucket, obj.object_key, expires=timedelta(minutes=15))
+        except Exception:
+            return None
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
@@ -53,25 +50,13 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Invoice
-        fields = [
-            "id",
-            "number",
-            "supplier",
-            "doc_date",
-            "status",
-            "error",
-            "created_at",
-            "updated_at",
-            "lines",
-            "files",
-        ]
+        fields = ["id", "number", "supplier", "doc_date", "status", "error", "created_at", "updated_at", "lines", "files"]
         read_only_fields = ["status", "error", "created_at", "updated_at", "files"]
 
     def create(self, validated_data):
         lines_data = validated_data.pop("lines", [])
         invoice = Invoice.objects.create(**validated_data)
         for i, ld in enumerate(lines_data, start=1):
-            # ld может содержать line_no, поэтому аккуратно вытаскиваем
             line_no = ld.pop("line_no", None) or i
             InvoiceLine.objects.create(invoice=invoice, line_no=line_no, **ld)
         return invoice

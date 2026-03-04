@@ -102,7 +102,9 @@ services:
       DATABASE_URL: postgres://nsi:nsi@nsi_db:5432/nsi
       DJANGO_DEBUG: "1"
       ALLOWED_HOSTS: "*"
-      # Accept both external (host) and internal (docker) issuer variants
+
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+
       KEYCLOAK_ISSUER: http://localhost:8080/realms/uom,http://keycloak:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
     ports:
@@ -110,10 +112,9 @@ services:
     depends_on:
       nsi_db:
         condition: service_healthy
-    command: >
+    command: >-
       sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
-      # FIX: монтируем код NSI, а не documents
       - ./services/nsi:/app
 
   documents:
@@ -123,7 +124,6 @@ services:
       DATABASE_URL: postgres://documents:documents@documents_db:5432/documents
       DJANGO_DEBUG: "1"
       ALLOWED_HOSTS: "*"
-      # Accept both external (host) and internal (docker) issuer variants
       KEYCLOAK_ISSUER: http://localhost:8080/realms/uom,http://keycloak:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
       CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
@@ -131,12 +131,19 @@ services:
       KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/token
       S2S_CLIENT_ID: documents-service
       S2S_CLIENT_SECRET: 0W8cjpHVNz9VC1Km0jQMIOSgPlbZcAV2
+
+      CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
+
+      MINIO_PUBLIC_ENDPOINT: localhost:9000
+      MINIO_PUBLIC_SECURE: "0"
+      MINIO_INTERNAL_ENDPOINT: minio:9000
+
     ports:
       - "8002:8000"
     depends_on:
       documents_db:
         condition: service_healthy
-    command: >
+    command: >-
       sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
     volumes:
       - ./services/documents:/app
@@ -148,7 +155,6 @@ services:
       DATABASE_URL: postgres://documents:documents@documents_db:5432/documents
       DJANGO_DEBUG: "1"
       ALLOWED_HOSTS: "*"
-      # Accept both external (host) and internal (docker) issuer variants
       KEYCLOAK_ISSUER: http://localhost:8080/realms/uom,http://keycloak:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
       CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
@@ -156,6 +162,11 @@ services:
       KEYCLOAK_TOKEN_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/token
       S2S_CLIENT_ID: documents-service
       S2S_CLIENT_SECRET: 0W8cjpHVNz9VC1Km0jQMIOSgPlbZcAV2
+
+      MINIO_INTERNAL_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: localhost:9000
+      MINIO_PUBLIC_SECURE: "0"
+
     depends_on:
       documents_db:
         condition: service_healthy
@@ -163,7 +174,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: >
+    command: >-
       sh -c "python manage.py migrate && celery -A documents_service worker -l info"
     volumes:
       - ./services/documents:/app
@@ -173,7 +184,6 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       NSI_BASE_URL: http://nsi:8000
-      # Accept both external (host) and internal (docker) issuer variants
       KEYCLOAK_ISSUER: http://localhost:8080/realms/uom,http://keycloak:8080/realms/uom
       KEYCLOAK_JWKS_URL: http://keycloak:8080/realms/uom/protocol/openid-connect/certs
     ports:
@@ -187,16 +197,55 @@ services:
     profiles: ["test"]
     environment:
       KEYCLOAK_URL: http://keycloak:8080
-      KEYCLOAK_REALM: uom
-      KEYCLOAK_CLIENT_ID: uom-cli
       NSI_URL: http://nsi:8000
-      DOCUMENTS_URL: http://documents:8000
+      DOCS_URL: http://documents:8000
+      ORIGIN: http://localhost:5173
     depends_on:
       - keycloak
       - nsi
       - documents
-      - documents_worker
       - conversion
+      - minio
+    command: ["pytest", "-q"]
+
+  ts_client_gen:
+    image: node:20-alpine
+    profiles: ["tools"]
+    working_dir: /repo/frontend
+    volumes:
+      - ./:/repo
+    environment:
+      DOCS_SCHEMA_URL: http://documents:8000/api/schema/
+      NSI_SCHEMA_URL: http://nsi:8000/api/schema/
+    depends_on:
+      - documents
+      - nsi
+    command: ["sh", "-c", "npm install && npm run gen"]
+
+  frontend:
+    image: node:20-alpine
+    profiles: ["ui"]
+    working_dir: /repo/frontend
+    volumes:
+      - ./:/repo
+    ports:
+      - "5173:5173"
+    environment:
+      # Vite env (exposed to browser)
+      VITE_KEYCLOAK_URL: http://localhost:8080
+      VITE_KEYCLOAK_REALM: uom
+      VITE_KEYCLOAK_CLIENT_ID: frontend
+      VITE_DOCS_BASE_URL: http://localhost:8002
+      VITE_NSI_BASE_URL: http://localhost:8001
+
+      # For codegen inside docker
+      DOCS_SCHEMA_URL: http://documents:8000/api/schema/
+      NSI_SCHEMA_URL: http://nsi:8000/api/schema/
+    depends_on:
+      - keycloak
+      - documents
+      - nsi
+    command: ["sh", "-c", "npm install && npm run gen && npm run dev -- --host 0.0.0.0 --port 5173"]
 
 volumes:
   keycloak_db:

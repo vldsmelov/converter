@@ -3,54 +3,25 @@
   "enabled": true,
   "roles": {
     "realm": [
-      {
-        "name": "nsi.ping"
-      },
-      {
-        "name": "documents.ping"
-      },
-      {
-        "name": "conversion.ping"
-      },
-      {
-        "name": "nsi.uom.read"
-      },
-      {
-        "name": "nsi.uom.write"
-      },
-      {
-        "name": "nsi.item.read"
-      },
-      {
-        "name": "nsi.item.write"
-      },
-      {
-        "name": "nsi.package.read"
-      },
-      {
-        "name": "nsi.package.write"
-      },
-      {
-        "name": "nsi.rule.read"
-      },
-      {
-        "name": "nsi.rule.write"
-      },
-      {
-        "name": "conversion.convert"
-      },
-      {
-        "name": "documents.invoice.read"
-      },
-      {
-        "name": "documents.invoice.write"
-      },
-      {
-        "name": "documents.invoice.calculate"
-      },
-      {
-        "name": "documents.invoice.generate"
-      }
+      { "name": "nsi.ping" },
+      { "name": "documents.ping" },
+      { "name": "conversion.ping" },
+
+      { "name": "nsi.uom.read" },
+      { "name": "nsi.uom.write" },
+      { "name": "nsi.item.read" },
+      { "name": "nsi.item.write" },
+      { "name": "nsi.package.read" },
+      { "name": "nsi.package.write" },
+      { "name": "nsi.rule.read" },
+      { "name": "nsi.rule.write" },
+
+      { "name": "conversion.convert" },
+
+      { "name": "documents.invoice.read" },
+      { "name": "documents.invoice.write" },
+      { "name": "documents.invoice.calculate" },
+      { "name": "documents.invoice.generate" }
     ]
   },
   "clients": [
@@ -61,12 +32,8 @@
       "directAccessGrantsEnabled": true,
       "standardFlowEnabled": false,
       "serviceAccountsEnabled": false,
-      "redirectUris": [
-        "*"
-      ],
-      "webOrigins": [
-        "*"
-      ]
+      "redirectUris": ["*"],
+      "webOrigins": ["*"]
     },
     {
       "clientId": "documents-service",
@@ -76,24 +43,42 @@
       "directAccessGrantsEnabled": false,
       "standardFlowEnabled": false,
       "secret": "0W8cjpHVNz9VC1Km0jQMIOSgPlbZcAV2"
+    },
+    {
+      "clientId": "frontend",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "http://localhost:5173",
+      "baseUrl": "/",
+      "redirectUris": ["http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:5173"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
     }
   ],
   "users": [
     {
       "username": "operator",
       "enabled": true,
+      "email": "test@test.test",
+      "emailVerified": true,
+      "firstName": "Operator",
+      "lastName": "Operatov",
       "credentials": [
-        {
-          "type": "password",
-          "value": "operator",
-          "temporary": false
-        }
+        { "type": "password", "value": "operator", "temporary": false }
       ],
       "realmRoles": [
         "nsi.ping",
         "documents.ping",
         "conversion.ping",
+
         "conversion.convert",
+
         "nsi.uom.read",
         "nsi.uom.write",
         "nsi.item.read",
@@ -102,15 +87,12 @@
         "nsi.package.write",
         "nsi.rule.read",
         "nsi.rule.write",
+
         "documents.invoice.read",
         "documents.invoice.write",
         "documents.invoice.calculate",
         "documents.invoice.generate"
-      ],
-      "emailVerified": true,
-      "email": "test@test.test",
-      "firstName": "Operator",
-      "lastName": "Operatov"
+      ]
     },
     {
       "username": "service-account-documents-service",
@@ -121,29 +103,8 @@
         "conversion.ping",
         "nsi.uom.read",
         "nsi.item.read",
-        "nsi.rule.read"
-      ]
-    },
-    {
-      "username": "clerk",
-      "enabled": true,
-      "email": "clerk@test.test",
-      "emailVerified": true,
-      "firstName": "Clerk",
-      "lastName": "Documents",
-      "credentials": [
-        {
-          "type": "password",
-          "value": "clerk",
-          "temporary": false
-        }
-      ],
-      "realmRoles": [
-        "documents.ping",
-        "documents.invoice.read",
-        "documents.invoice.write",
-        "documents.invoice.calculate",
-        "documents.invoice.generate"
+        "nsi.rule.read",
+        "nsi.package.read"
       ]
     }
   ]
