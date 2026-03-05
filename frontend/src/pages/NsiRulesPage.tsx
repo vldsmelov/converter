@@ -1,137 +1,143 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useApi } from "./api";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { jsonErr, toNum } from "./nsi_utils";
 import { requestJson } from "../api/request";
 
+type Uom = any;
+type Item = any;
+type ItemCat = any;
+type GlobalRule = any;
+type CatPkg = any;
+type Rule = any;
+
 export default function NsiRulesPage() {
-  const { nsi } = useApi();
   const { token } = useAuth();
-  const [rules, setRules] = useState<any[]>([]);
-  const [items, setItems] = useState<any[]>([]);
-  const [cats, setCats] = useState<any[]>([]);
+  const nav = useNavigate();
+
+  const [uoms, setUoms] = useState<Uom[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
+  const [itemCats, setItemCats] = useState<ItemCat[]>([]);
+
+  const [globalRules, setGlobalRules] = useState<GlobalRule[]>([]);
+  const [catPkgs, setCatPkgs] = useState<CatPkg[]>([]);
+  const [rules, setRules] = useState<Rule[]>([]);
+
   const [err, setErr] = useState<string | null>(null);
 
-  const [itemId, setItemId] = useState<number | null>(null);
-  const [fromCat, setFromCat] = useState<number | null>(null);
-  const [toCat, setToCat] = useState<number | null>(null);
-  const [kgPerPc, setKgPerPc] = useState("2.5");
+  const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
+  const uomCode = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "—");
+
+  const itemCatById = useMemo(() => new Map<number, any>(itemCats.map((c: any) => [c.id, c])), [itemCats]);
+  const itemCatName = (id: number | null | undefined) => (id ? (itemCatById.get(id)?.name ?? String(id)) : "—");
+
+  const itemById = useMemo(() => new Map<number, any>(items.map((i: any) => [i.id, i])), [items]);
 
   async function load() {
+    if (!token) return;
     setErr(null);
-
-    const it = await nsi.GET("/api/v1/items/");
-    if (it.error) { setErr("Товары: " + jsonErr(it.error)); return; }
-    const iarr = (it.data as any) ?? [];
-    setItems(iarr);
-    const demo = iarr.find((x: any) => (x.sku ?? "").includes("DEMO")) ?? iarr[0];
-    if (demo && itemId === null) setItemId(demo.id);
-
-    const c = await nsi.GET("/api/v1/uom-categories/");
-    if (c.error) { setErr("Категории: " + jsonErr(c.error)); return; }
-    const carr = (c.data as any) ?? [];
-    setCats(carr);
-    const count = carr.find((x: any) => x.code === "COUNT") ?? carr[0];
-    const mass = carr.find((x: any) => x.code === "MASS") ?? carr[0];
-    if (count && fromCat === null) setFromCat(count.id);
-    if (mass && toCat === null) setToCat(mass.id);
-
-    const r = await nsi.GET("/api/v1/rules/");
-    if (r.error) { setErr("Правила: " + jsonErr(r.error)); return; }
-    setRules((r.data as any) ?? []);
-  }
-
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
-
-  const itemSku = useMemo(() => {
-    const m = new Map(items.map((i: any) => [i.id, i.sku]));
-    return (id: number) => m.get(id) ?? id;
-  }, [items]);
-
-  const catCode = useMemo(() => {
-    const m = new Map(cats.map((c: any) => [c.id, c.code]));
-    return (id: number) => m.get(id) ?? id;
-  }, [cats]);
-
-  async function create() {
-    if (!token) { setErr("Нет токена авторизации."); return; }
-    if (!itemId || !fromCat || !toCat) return;
-    setErr(null);
-
     try {
-      await requestJson({
-        method: "POST",
-        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`,
-        token,
-        body: {
-          item: itemId,
-          from_category: fromCat,
-          to_category: toCat,
-          rule_type: "pcs_weight",
-          conditions: {},
-          params: { kg_per_pc: kgPerPc },
-          priority: 0,
-          status: "active",
-        },
-      });
-      await load();
+      const [u, it, ic, gr, cp, rl] = await Promise.all([
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/global-uom-rules/`, token }).catch(() => []),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/category-packages/`, token }).catch(() => []),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`, token }),
+      ]);
+
+      setUoms(u ?? []);
+      setItems(it ?? []);
+      setItemCats(ic ?? []);
+      setGlobalRules(gr ?? []);
+      setCatPkgs(cp ?? []);
+      setRules(rl ?? []);
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
   }
 
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+
+  const weightRules = useMemo(() => rules.filter((r: any) => r.rule_type === "pcs_weight"), [rules]);
+
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h3 style={{ margin: 0 }}>НСИ: Правила конвертации</h3>
-        <button className="btn" onClick={load}>Обновить</button>
+        <h3 style={{ margin: 0 }}>НСИ: Правила</h3>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn" onClick={load}>Обновить</button>
+          <button className="btn primary" onClick={() => nav("/nsi/rules/new")}>
+            Создать новое правило
+          </button>
+        </div>
       </div>
+
+      <p style={{ marginTop: 8 }}>
+        Здесь отображаются <b>только созданные правила</b>. Добавление — через кнопку <b>«Создать новое правило»</b>.
+      </p>
 
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
 
-      <div className="row" style={{ marginTop: 8 }}>
-        <label><small>Товар</small><br />
-          <select value={itemId ?? ""} onChange={(e) => setItemId(toNum(e.target.value))}>
-            {items.map((i: any) => <option key={i.id} value={i.id}>{i.sku}</option>)}
-          </select>
-        </label>
-        <label><small>Из категории</small><br />
-          <select value={fromCat ?? ""} onChange={(e) => setFromCat(toNum(e.target.value))}>
-            {cats.map((c: any) => <option key={c.id} value={c.id}>{c.code}</option>)}
-          </select>
-        </label>
-        <label><small>В категорию</small><br />
-          <select value={toCat ?? ""} onChange={(e) => setToCat(toNum(e.target.value))}>
-            {cats.map((c: any) => <option key={c.id} value={c.id}>{c.code}</option>)}
-          </select>
-        </label>
-        <label><small>кг за штуку</small><br />
-          <input value={kgPerPc} onChange={(e) => setKgPerPc(e.target.value)} />
-        </label>
-        <button className="btn primary" onClick={create}>Добавить</button>
+      <div className="card" style={{ marginTop: 12 }}>
+        <h4 style={{ marginTop: 0 }}>Глобальные правила (для всех)</h4>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Из ЕИ</th><th>В ЕИ</th><th>Коэффициент</th><th>Статус</th></tr>
+          </thead>
+          <tbody>
+            {globalRules.map((r: any) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>{uomCode(r.from_uom)}</td>
+                <td>{uomCode(r.to_uom)}</td>
+                <td>{r.multiplier}</td>
+                <td>{r.status}</td>
+              </tr>
+            ))}
+            {globalRules.length === 0 && <tr><td colSpan={5}><small>Пока нет глобальных правил.</small></td></tr>}
+          </tbody>
+        </table>
       </div>
 
-      <table style={{ marginTop: 12 }}>
-        <thead>
-          <tr>
-            <th>ID</th><th>Товар</th><th>Из</th><th>В</th><th>Тип</th><th>Статус</th><th>Параметры</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rules.map((r: any) => (
-            <tr key={r.id}>
-              <td>{r.id}</td>
-              <td>{itemSku(r.item)}</td>
-              <td>{catCode(r.from_category)}</td>
-              <td>{catCode(r.to_category)}</td>
-              <td>{r.rule_type}</td>
-              <td>{r.status}</td>
-              <td><small>{JSON.stringify(r.params)}</small></td>
-            </tr>
-          ))}
-          {rules.length === 0 && <tr><td colSpan={7}><small>Пока нет правил.</small></td></tr>}
-        </tbody>
-      </table>
+      <div className="card" style={{ marginTop: 12 }}>
+        <h4 style={{ marginTop: 0 }}>Правила для категории (упаковки)</h4>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Категория</th><th>Правило</th><th>Статус</th></tr>
+          </thead>
+          <tbody>
+            {catPkgs.map((p: any) => (
+              <tr key={p.id}>
+                <td>{p.id}</td>
+                <td>{itemCatName(p.category)}</td>
+                <td><span className="badge">1 {uomCode(p.package_uom)}</span> = <b>{p.content_qty}</b> {uomCode(p.content_uom)}</td>
+                <td>{p.status}</td>
+              </tr>
+            ))}
+            {catPkgs.length === 0 && <tr><td colSpan={4}><small>Пока нет правил для категорий.</small></td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card" style={{ marginTop: 12 }}>
+        <h4 style={{ marginTop: 0 }}>Правила для номенклатуры (вес штуки)</h4>
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Номенклатура</th><th>kg_per_pc</th><th>Статус</th></tr>
+          </thead>
+          <tbody>
+            {weightRules.map((r: any) => (
+              <tr key={r.id}>
+                <td>{r.id}</td>
+                <td>{itemById.get(r.item)?.name ?? r.item}</td>
+                <td>{r.params?.kg_per_pc}</td>
+                <td>{r.status}</td>
+              </tr>
+            ))}
+            {weightRules.length === 0 && <tr><td colSpan={4}><small>Пока нет правил по номенклатуре.</small></td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

@@ -12,7 +12,7 @@ function fmtDateTime(s: string | null | undefined) {
   return s.replace("T", " ").slice(0, 19);
 }
 
-export default function InvoiceDetailPage() {
+export default function InvoiceDetailsPage() {
   const { id } = useParams();
   const invId = Number(id);
   const { token } = useAuth();

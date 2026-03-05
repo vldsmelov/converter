@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.authn",
     "apps.nsi_core",
+    "apps.catalog",
 ]
 
 REST_FRAMEWORK = {

@@ -70,6 +70,23 @@ def ensure_uom(client: httpx.Client, token: str, code: str, name: str, category_
     return r.json()["id"]
 
 
+
+
+def ensure_item_category(client: httpx.Client, token: str, name: str, default_uom_id: int) -> int:
+    r = client.get(f"{NSI_URL}/api/v1/item-categories/", headers=auth_headers(token))
+    r.raise_for_status()
+    for c in r.json():
+        if c["name"] == name:
+            return c["id"]
+
+    r = client.post(
+        f"{NSI_URL}/api/v1/item-categories/",
+        headers={**auth_headers(token), "Content-Type": "application/json"},
+        json={"name": name, "default_uom": default_uom_id, "is_active": True},
+    )
+    r.raise_for_status()
+    return r.json()["id"]
+
 def test_openapi_and_full_flow():
     # Wait for services
     wait_ok(f"{NSI_URL}/healthz")
@@ -101,6 +118,8 @@ def test_openapi_and_full_flow():
         ton_id = ensure_uom(client, token, "TON", "Tonne", mass_id, "1000", 3)
         bag_id = ensure_uom(client, token, "BAG", "Bag", count_id, "1", 0)
 
+        cat_id = ensure_item_category(client, token, "E2E Категория", kg_id)
+
         sku = f"E2E-{uuid.uuid4().hex[:8]}"
         item = client.post(
             f"{NSI_URL}/api/v1/items/",
@@ -108,6 +127,7 @@ def test_openapi_and_full_flow():
             json={
                 "sku": sku,
                 "name": "E2E item",
+                "category": cat_id,
                 "is_active": True,
                 "policy": {
                     "storage_uom": kg_id,

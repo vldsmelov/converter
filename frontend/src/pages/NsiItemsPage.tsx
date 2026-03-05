@@ -1,68 +1,78 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useApi } from "./api";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { jsonErr, toNum } from "./nsi_utils";
 import { requestJson } from "../api/request";
+import PageHeader from "../components/PageHeader";
+import { toNum } from "./nsi_utils";
 
 export default function NsiItemsPage() {
-  const { nsi } = useApi();
   const { token } = useAuth();
+  const nav = useNavigate();
+
   const [items, setItems] = useState<any[]>([]);
+  const [cats, setCats] = useState<any[]>([]);
   const [uoms, setUoms] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
-  const [sku, setSku] = useState("SKU-NEW");
-  const [name, setName] = useState("Новый товар");
-  const [postingUom, setPostingUom] = useState<number | null>(null);
-  const [allowFractional, setAllowFractional] = useState(true);
-  const [roundingPrecision, setRoundingPrecision] = useState(3);
+  const [q, setQ] = useState("");
+  const [catFilter, setCatFilter] = useState<number | "all">("all");
+  const [onlyManualUom, setOnlyManualUom] = useState(false);
 
-  async function load() {
-    setErr(null);
+  const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
+  const uomCode = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "—");
 
-    const u = await nsi.GET("/api/v1/uoms/");
-    if (u.error) { setErr("Единицы: " + jsonErr(u.error)); return; }
-    const uarr = (u.data as any) ?? [];
-    setUoms(uarr);
-    const kg = uarr.find((x: any) => x.code === "KG") ?? uarr[0];
-    if (kg && postingUom === null) setPostingUom(kg.id);
+  const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
+  const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "—");
+  const catDefaultUom = (id: number | null | undefined) => (id ? (catById.get(id)?.default_uom ?? null) : null);
 
-    const r = await nsi.GET("/api/v1/items/");
-    if (r.error) { setErr("Товары: " + jsonErr(r.error)); return; }
-    setItems((r.data as any) ?? []);
+  function itemStorageUomId(it: any): number | null {
+    const v = it?.policy?.posting_uom; // единица хранения в базе
+    return typeof v === "number" ? v : null;
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  function uomSource(it: any): "default" | "manual" | "none" {
+    const defU = catDefaultUom(it.category);
+    const su = itemStorageUomId(it);
+    if (!defU || !su) return "none";
+    return defU === su ? "default" : "manual";
+  }
 
-  const uomCode = useMemo(() => {
-    const m = new Map(uoms.map((u: any) => [u.id, u.code]));
-    return (id: number) => m.get(id) ?? id;
-  }, [uoms]);
-
-  async function create() {
-    if (!token) { setErr("Нет токена авторизации."); return; }
-    if (!postingUom) return;
+  async function load() {
+    if (!token) return;
     setErr(null);
-
     try {
-      await requestJson({
-        method: "POST",
-        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`,
-        token,
-        body: {
-          sku,
-          name,
-          is_active: true,
-          policy: {
-            storage_uom: postingUom,
-            posting_uom: postingUom,
-            allow_fractional: allowFractional,
-            rounding_precision: roundingPrecision,
-          }
-        },
-      });
-      setSku("");
-      setName("");
+      const [u, c, it] = await Promise.all([
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
+      ]);
+      setUoms(u ?? []);
+      setCats(c ?? []);
+      setItems(it ?? []);
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    }
+  }
+
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+
+  const filtered = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    return items.filter((it: any) => {
+      if (catFilter !== "all" && it.category !== catFilter) return false;
+      if (onlyManualUom && uomSource(it) !== "manual") return false;
+      if (!qq) return true;
+      const s = `${it.name ?? ""} ${catName(it.category)} ${it.sku ?? ""}`.toLowerCase();
+      return s.includes(qq);
+    });
+  }, [items, q, catFilter, onlyManualUom, cats]);
+
+  async function remove(id: number) {
+    if (!token) return;
+    if (!confirm("Удалить номенклатурную позицию?")) return;
+    setErr(null);
+    try {
+      await requestJson({ method: "DELETE", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/${id}/`, token });
       await load();
     } catch (e: any) {
       setErr(e?.message ?? String(e));
@@ -71,52 +81,81 @@ export default function NsiItemsPage() {
 
   return (
     <div className="card">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h3 style={{ margin: 0 }}>НСИ: Номенклатура</h3>
-        <button className="btn" onClick={load}>Обновить</button>
-      </div>
+      <PageHeader
+        title="НСИ: Номенклатура"
+        subtitle="Единица хранения показывает, в какой единице мы храним количество в базе (например, болты — PCS). Категория влияет только на подсказку при создании."
+        right={
+          <>
+            <button className="btn" onClick={load}>Обновить</button>
+            <button className="btn primary" onClick={() => nav("/nsi/items/new")}>Создать позицию</button>
+          </>
+        }
+      />
 
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
 
-      <div className="row" style={{ marginTop: 8 }}>
-        <label><small>SKU</small><br />
-          <input value={sku} onChange={(e) => setSku(e.target.value)} />
-        </label>
-        <label style={{ flex: 1 }}><small>Название</small><br />
-          <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
-        </label>
-        <label><small>ЕИ проводки</small><br />
-          <select value={postingUom ?? ""} onChange={(e) => setPostingUom(toNum(e.target.value))}>
-            {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
-          </select>
-        </label>
-        <label><small>Округление</small><br />
-          <input type="number" value={roundingPrecision} onChange={(e) => setRoundingPrecision(toNum(e.target.value))} />
-        </label>
-        <label className="row" style={{ gap: 6 }}>
-          <input type="checkbox" checked={allowFractional} onChange={(e) => setAllowFractional(e.target.checked)} />
-          <small>дробные</small>
-        </label>
-        <button className="btn primary" onClick={create}>Добавить</button>
+      <div className="card" style={{ marginTop: 12 }}>
+        <div className="row">
+          <label style={{ flex: 1 }}>
+            <small>Поиск</small><br />
+            <input value={q} onChange={(e) => setQ(e.target.value)} style={{ width: "100%" }} placeholder="например: болт" />
+          </label>
+          <label>
+            <small>Категория</small><br />
+            <select value={catFilter === "all" ? "all" : String(catFilter)} onChange={(e) => {
+              const v = e.target.value;
+              setCatFilter(v === "all" ? "all" : toNum(v));
+            }}>
+              <option value="all">Все</option>
+              {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </label>
+          <label className="row" style={{ gap: 6 }}>
+            <input type="checkbox" checked={onlyManualUom} onChange={(e) => setOnlyManualUom(e.target.checked)} />
+            <small>только с ручной единицей</small>
+          </label>
+        </div>
       </div>
 
       <table style={{ marginTop: 12 }}>
         <thead>
           <tr>
-            <th>ID</th><th>SKU</th><th>Название</th><th>ЕИ проводки</th><th>Активен</th>
+            <th>ID</th>
+            <th>Название</th>
+            <th>Категория</th>
+            <th>Единица хранения</th>
+            <th>Источник</th>
+            <th>Активен</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
-          {items.map((it: any) => (
-            <tr key={it.id}>
-              <td>{it.id}</td>
-              <td>{it.sku}</td>
-              <td>{it.name}</td>
-              <td>{uomCode(it.policy?.posting_uom)}</td>
-              <td>{String(it.is_active)}</td>
-            </tr>
-          ))}
-          {items.length === 0 && <tr><td colSpan={5}><small>Пока нет товаров.</small></td></tr>}
+          {filtered.map((it: any) => {
+            const su = itemStorageUomId(it);
+            const src = uomSource(it);
+            return (
+              <tr key={it.id}>
+                <td>{it.id}</td>
+                <td>{it.name}</td>
+                <td>{catName(it.category)}</td>
+                <td><span className="badge">{uomCode(su)}</span></td>
+                <td>
+                  {src === "default" ? <span className="badge">по умолчанию</span> :
+                   src === "manual" ? <span className="badge">вручную</span> : "—"}
+                </td>
+                <td>{String(it.is_active)}</td>
+                <td style={{ textAlign: "right" }}>
+                  <button className="btn" onClick={() => nav(`/nsi/items/${it.id}/edit`)} style={{ marginRight: 8 }}>
+                    Редактировать
+                  </button>
+                  <button className="btn" onClick={() => remove(it.id)}>
+                    Удалить
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+          {filtered.length === 0 && <tr><td colSpan={7}><small>Ничего не найдено.</small></td></tr>}
         </tbody>
       </table>
     </div>

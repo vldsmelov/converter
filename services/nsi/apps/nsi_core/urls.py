@@ -1,16 +1,25 @@
-from django.urls import path
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import UoMCategoryViewSet, UoMViewSet, ItemViewSet, PackageSpecViewSet
-from .views import ConversionRuleViewSet, MatchRuleView
+from .views import (
+    ConversionRuleViewSet,
+    GlobalUomRuleViewSet,
+    ItemViewSet,
+    MatchRuleView,
+    PackageSpecViewSet,
+    UoMCategoryViewSet,
+    UoMViewSet,
+)
 
 router = DefaultRouter()
-router.register(r"uom-categories", UoMCategoryViewSet, basename="uom-categories")
-router.register(r"uoms", UoMViewSet, basename="uoms")
-router.register(r"items", ItemViewSet, basename="items")
-router.register(r"packages", PackageSpecViewSet, basename="packages")
-router.register(r"rules", ConversionRuleViewSet, basename="rules")
+router.register(r"uom-categories", UoMCategoryViewSet, basename="uom-category")
+router.register(r"uoms", UoMViewSet, basename="uom")
+router.register(r"items", ItemViewSet, basename="item")
+router.register(r"packages", PackageSpecViewSet, basename="package")
+router.register(r"rules", ConversionRuleViewSet, basename="rule")
+router.register(r"global-uom-rules", GlobalUomRuleViewSet, basename="global-uom-rule")
 
 urlpatterns = [
-    path("rules/match/", MatchRuleView.as_view(), name="rules-match"),
-] + router.urls
+    path("", include(router.urls)),
+    path("rules/match", MatchRuleView.as_view(), name="rule-match"),
+]
