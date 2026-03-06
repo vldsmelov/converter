@@ -69,6 +69,22 @@ export default function NsiUomEditPage() {
     }
   }
 
+  async function remove() {
+    if (!token) return;
+    if (!confirm("Удалить ЕИ?")) return;
+    setErr(null);
+    try {
+      await requestJson({
+        method: "DELETE",
+        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/${uomId}/`,
+        token,
+      });
+      nav("/nsi/uoms");
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    }
+  }
+
   return (
     <div className="card">
       <PageHeader
@@ -114,6 +130,8 @@ export default function NsiUomEditPage() {
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => nav("/nsi/uoms")}>Отмена</button>
           <button className="btn primary" onClick={save}>Сохранить</button>
+          <div style={{ flex: 1 }} />
+          <button className="btn" onClick={remove}>Удалить</button>
         </div>
       </div>
     </div>

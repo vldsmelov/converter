@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson } from "../api/request";
 import PageHeader from "../components/PageHeader";
@@ -12,31 +12,72 @@ type UomCat = any;
 type Item = any;
 type ItemCat = any;
 
+type CategoryRuleMeta = {
+  supplier_code: string;
+  barcode: string;
+  effective_from: string | null;
+  effective_to: string | null;
+};
+
+type ItemRuleMeta = {
+  conditions: Record<string, unknown>;
+  priority: number;
+  effective_from: string | null;
+  effective_to: string | null;
+  supersedes: number | null;
+};
+
 function n(s: unknown): number {
   const v = Number(String(s ?? "").replace(",", "."));
   return Number.isFinite(v) ? v : 0;
 }
 
 function fmt(x: number, digits = 6) {
-  return Number.isFinite(x) ? String(Number(x.toFixed(digits))) : "—";
+  return Number.isFinite(x) ? String(Number(x.toFixed(digits))) : "-";
 }
 
-function up(s: any) {
+function up(s: unknown) {
   return String(s ?? "").toUpperCase();
+}
+
+function resolveScope(s: unknown): Scope {
+  if (s === "global" || s === "category" || s === "item") return s;
+  return "global";
+}
+
+function pickUomForCategory(uoms: any[], uomCatsById: Map<number, any>, categoryId: number | null | undefined): number | null {
+  if (!categoryId) return null;
+  const inCategory = uoms.filter((u: any) => u.category === categoryId);
+  if (!inCategory.length) return null;
+
+  const catCode = up(uomCatsById.get(categoryId)?.code);
+  const preferredCode = catCode === "COUNT" ? "PCS" : (catCode === "MASS" ? "KG" : "");
+  if (preferredCode) {
+    const preferred = inCategory.find((u: any) => up(u.code) === preferredCode);
+    if (preferred) return preferred.id;
+  }
+  return inCategory[0].id;
 }
 
 export default function NsiRulesWizardPage() {
   const { token } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
+  const { scope: scopeParam, id: idParam } = useParams<{ scope?: string; id?: string }>();
 
-  const qs = useMemo(() => new URLSearchParams(window.location.search), []);
-  const preScope = (qs.get("scope") as Scope) || "global";
-  const preFrom = qs.get("from"); // uom code
-  const preTo = qs.get("to");     // uom code
+  const qs = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const scopeFromQuery = resolveScope(qs.get("scope"));
+  const preFrom = qs.get("from");
+  const preTo = qs.get("to");
   const preCatId = qs.get("category_id");
   const preItemId = qs.get("item_id");
 
-  const [scope, setScope] = useState<Scope>(preScope);
+  const isEditMode = idParam !== undefined;
+  const parsedId = idParam ? Number(idParam) : NaN;
+  const editId = Number.isFinite(parsedId) ? parsedId : null;
+  const editScope = resolveScope(scopeParam);
+
+  const [scope, setScope] = useState<Scope>(() => (isEditMode ? editScope : scopeFromQuery));
 
   const [uoms, setUoms] = useState<Uom[]>([]);
   const [uomCats, setUomCats] = useState<UomCat[]>([]);
@@ -46,16 +87,25 @@ export default function NsiRulesWizardPage() {
 
   const [fromUomId, setFromUomId] = useState<number | null>(null);
   const [toUomId, setToUomId] = useState<number | null>(null);
-
-  // "coef" meaning depends on scope:
-  // - global: multiplier
-  // - category: content_qty (e.g. 1 BAG = 50 KG)
-  // - item: kg_per_pc (weight of 1 PCS in KG)
   const [coef, setCoef] = useState("1");
 
-  const [status, setStatus] = useState<"active" | "draft">("active");
+  const [status, setStatus] = useState<"active" | "draft" | "archived">("active");
   const [categoryId, setCategoryId] = useState<number | null>(preCatId ? Number(preCatId) : null);
   const [itemId, setItemId] = useState<number | null>(preItemId ? Number(preItemId) : null);
+
+  const [categoryRuleMeta, setCategoryRuleMeta] = useState<CategoryRuleMeta>({
+    supplier_code: "",
+    barcode: "",
+    effective_from: null,
+    effective_to: null,
+  });
+  const [itemRuleMeta, setItemRuleMeta] = useState<ItemRuleMeta>({
+    conditions: {},
+    priority: 0,
+    effective_from: null,
+    effective_to: null,
+    supersedes: null,
+  });
 
   const [exampleInQty, setExampleInQty] = useState("1");
 
@@ -67,14 +117,14 @@ export default function NsiRulesWizardPage() {
   const fromUom = fromUomId ? uomById.get(fromUomId) : null;
   const toUom = toUomId ? uomById.get(toUomId) : null;
 
-  const fromCatCode = fromUom ? (uomCatsById.get(fromUom.category)?.code ?? "—") : "—";
-  const toCatCode = toUom ? (uomCatsById.get(toUom.category)?.code ?? "—") : "—";
+  const fromCatCode = fromUom ? (uomCatsById.get(fromUom.category)?.code ?? "-") : "-";
+  const toCatCode = toUom ? (uomCatsById.get(toUom.category)?.code ?? "-") : "-";
 
   const exampleText = useMemo(() => {
     if (scope === "global") return "Пример товара: любой товар";
-    if (scope === "category") return `Пример товара: любой товар из категории «${itemCatById.get(categoryId ?? -1)?.name ?? "—"}»`;
+    if (scope === "category") return `Пример товара: любой товар из категории "${itemCatById.get(categoryId ?? -1)?.name ?? "-"}"`;
     const it = itemById.get(itemId ?? -1);
-    return `Пример товара: ${it?.name ?? "—"}`;
+    return `Пример товара: ${it?.name ?? "-"}`;
   }, [scope, categoryId, itemId, itemById, itemCatById]);
 
   const exampleOutQty = useMemo(() => {
@@ -82,16 +132,13 @@ export default function NsiRulesWizardPage() {
     const k = n(coef);
 
     if (scope === "item") {
-      // coef = kg_per_pc
-      if (k <= 0) return "—";
-      // COUNT->MASS: kg = pcs * kg_per_pc ; MASS->COUNT: pcs = kg / kg_per_pc
+      if (k <= 0) return "-";
       if (fromCatCode === "COUNT" && toCatCode === "MASS") return fmt(inQ * k, 6);
       if (fromCatCode === "MASS" && toCatCode === "COUNT") return fmt(inQ / k, 6);
-      return "—";
+      return "-";
     }
 
-    // global/category: multiplier
-    if (k <= 0) return "—";
+    if (k <= 0) return "-";
     return fmt(inQ * k, 6);
   }, [exampleInQty, coef, scope, fromCatCode, toCatCode]);
 
@@ -102,38 +149,39 @@ export default function NsiRulesWizardPage() {
 
     if (scope === "global") {
       if (fromUom && toUom && fromUom.category !== toUom.category) {
-        v.push("Глобальные правила возможны только внутри одной категории ЕИ (например CM→M, KG→TON).");
+        v.push("Глобальные правила возможны только внутри одной категории ЕИ.");
       }
     }
 
     if (scope === "category") {
       if (!categoryId) v.push("Выберите категорию номенклатуры.");
-      if (fromUom && fromCatCode !== "COUNT") v.push("Для правила категории входящая ЕИ должна быть из COUNT (например BAG).");
-      if (toUom && toCatCode !== "MASS") v.push("Для правила категории итоговая ЕИ должна быть из MASS (например KG).");
+      if (fromUom && fromCatCode !== "COUNT") v.push("Для правила категории входящая ЕИ должна быть из COUNT.");
+      if (toUom && toCatCode !== "MASS") v.push("Для правила категории итоговая ЕИ должна быть из MASS.");
     }
 
     if (scope === "item") {
       if (!itemId) v.push("Выберите номенклатурную позицию.");
-
-      // Allow BOTH directions: MASS<->COUNT (example: KG -> PCS or PCS -> KG)
       const okPair = new Set([fromCatCode, toCatCode]);
       if (!(okPair.has("COUNT") && okPair.has("MASS"))) {
-        v.push("Для правила номенклатуры нужен перевод между COUNT и MASS (например KG→PCS или PCS→KG).");
+        v.push("Для правила номенклатуры нужен перевод между COUNT и MASS.");
       }
-
-      // To avoid weird COUNT units, require PCS on the COUNT side
-      if (fromCatCode === "COUNT" && up(fromUom?.code) !== "PCS") v.push("Для правила номенклатуры COUNT-единица должна быть PCS.");
-      if (toCatCode === "COUNT" && up(toUom?.code) !== "PCS") v.push("Для правила номенклатуры COUNT-единица должна быть PCS.");
+      if (fromCatCode === "COUNT" && up(fromUom?.code) !== "PCS") v.push("COUNT-единица должна быть PCS.");
+      if (toCatCode === "COUNT" && up(toUom?.code) !== "PCS") v.push("COUNT-единица должна быть PCS.");
     }
 
     return v;
   }, [scope, fromUom, toUom, coef, categoryId, itemId, fromCatCode, toCatCode]);
 
-  const canCreate = validations.length === 0;
+  const canSave = validations.length === 0 && (!isEditMode || !!editId);
+
+  useEffect(() => {
+    if (isEditMode) setScope(editScope);
+  }, [isEditMode, editScope]);
 
   async function load() {
     if (!token) return;
     setErr(null);
+
     try {
       const [u, uc, it, ic] = await Promise.all([
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
@@ -142,27 +190,88 @@ export default function NsiRulesWizardPage() {
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
       ]);
 
-      setUoms(u ?? []);
-      setUomCats(uc ?? []);
-      setItems(it ?? []);
-      setItemCats(ic ?? []);
+      const nextUoms = u ?? [];
+      const nextUomCats = uc ?? [];
+      const nextItems = it ?? [];
+      const nextItemCats = ic ?? [];
+      const nextUomCatsById = new Map<number, any>(nextUomCats.map((c: any) => [c.id, c]));
 
-      // Prefill UoMs by code if provided
+      setUoms(nextUoms);
+      setUomCats(nextUomCats);
+      setItems(nextItems);
+      setItemCats(nextItemCats);
+
+      if (isEditMode) {
+        if (!editId) {
+          throw new Error("Некорректный идентификатор правила.");
+        }
+
+        if (editScope === "global") {
+          const r = await requestJson<any>({
+            method: "GET",
+            url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/global-uom-rules/${editId}/`,
+            token,
+          });
+          setFromUomId(r.from_uom ?? null);
+          setToUomId(r.to_uom ?? null);
+          setCoef(String(r.multiplier ?? "1"));
+          setStatus((r.status ?? "active") as any);
+        } else if (editScope === "category") {
+          const r = await requestJson<any>({
+            method: "GET",
+            url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/category-packages/${editId}/`,
+            token,
+          });
+          setCategoryId(r.category ?? null);
+          setFromUomId(r.package_uom ?? null);
+          setToUomId(r.content_uom ?? null);
+          setCoef(String(r.content_qty ?? "1"));
+          setStatus((r.status ?? "active") as any);
+          setCategoryRuleMeta({
+            supplier_code: String(r.supplier_code ?? ""),
+            barcode: String(r.barcode ?? ""),
+            effective_from: r.effective_from ? String(r.effective_from) : null,
+            effective_to: r.effective_to ? String(r.effective_to) : null,
+          });
+        } else {
+          const r = await requestJson<any>({
+            method: "GET",
+            url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/${editId}/`,
+            token,
+          });
+          setItemId(r.item ?? null);
+          setCoef(String(r.params?.kg_per_pc ?? "1"));
+          setStatus((r.status ?? "active") as any);
+          setItemRuleMeta({
+            conditions: (r.conditions && typeof r.conditions === "object" && !Array.isArray(r.conditions)) ? r.conditions : {},
+            priority: Number(r.priority ?? 0),
+            effective_from: r.effective_from ? String(r.effective_from) : null,
+            effective_to: r.effective_to ? String(r.effective_to) : null,
+            supersedes: r.supersedes ? Number(r.supersedes) : null,
+          });
+
+          const guessedFromUomId = pickUomForCategory(nextUoms, nextUomCatsById, r.from_category);
+          const guessedToUomId = pickUomForCategory(nextUoms, nextUomCatsById, r.to_category);
+          setFromUomId(guessedFromUomId);
+          setToUomId(guessedToUomId);
+        }
+        return;
+      }
+
       if (preFrom && fromUomId === null) {
-        const fu = (u ?? []).find((x: any) => up(x.code) === up(preFrom));
+        const fu = nextUoms.find((x: any) => up(x.code) === up(preFrom));
         if (fu) setFromUomId(fu.id);
       }
       if (preTo && toUomId === null) {
-        const tu = (u ?? []).find((x: any) => up(x.code) === up(preTo));
+        const tu = nextUoms.find((x: any) => up(x.code) === up(preTo));
         if (tu) setToUomId(tu.id);
       }
 
-      // Defaults if still empty
-      const cm = (u ?? []).find((x: any) => x.code === "CM");
-      const m = (u ?? []).find((x: any) => x.code === "M");
-      const bag = (u ?? []).find((x: any) => x.code === "BAG");
-      const kg = (u ?? []).find((x: any) => x.code === "KG");
-      const pcs = (u ?? []).find((x: any) => x.code === "PCS");
+      const cm = nextUoms.find((x: any) => x.code === "CM");
+      const m = nextUoms.find((x: any) => x.code === "M");
+      const bag = nextUoms.find((x: any) => x.code === "BAG");
+      const kg = nextUoms.find((x: any) => x.code === "KG");
+      const pcs = nextUoms.find((x: any) => x.code === "PCS");
 
       if (!fromUomId || !toUomId) {
         if (scope === "global" && cm && m) { setFromUomId(cm.id); setToUomId(m.id); setCoef("0.01"); }
@@ -170,40 +279,48 @@ export default function NsiRulesWizardPage() {
         if (scope === "item" && kg && pcs) { setFromUomId(kg.id); setToUomId(pcs.id); setCoef("0.023"); }
       }
 
-      if (!categoryId && (ic ?? []).length) setCategoryId((ic ?? [])[0].id);
-      if (!itemId && (it ?? []).length) setItemId((it ?? [])[0].id);
+      if (!categoryId && nextItemCats.length) setCategoryId(nextItemCats[0].id);
+      if (!itemId && nextItems.length) setItemId(nextItems[0].id);
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token, isEditMode, editId, editScope, location.search]);
 
-  // Adjust coef label per scope
   const coefLabel = useMemo(() => {
     if (scope === "global") return "Коэффициент (multiplier)";
     if (scope === "category") return "Коэффициент (сколько итоговой ЕИ в 1 входящей)";
     return "Вес 1 PCS (kg_per_pc, в KG)";
   }, [scope]);
 
-  async function createRule() {
+  async function saveRule() {
     if (!token) return;
-    if (!canCreate) return;
+    if (!canSave) return;
+
+    if (isEditMode && !editId) {
+      setErr("Некорректный идентификатор правила.");
+      return;
+    }
 
     setErr(null);
 
     try {
       if (scope === "global") {
         await requestJson({
-          method: "POST",
-          url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/global-uom-rules/`,
+          method: isEditMode ? "PUT" : "POST",
+          url: isEditMode
+            ? `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/global-uom-rules/${editId}/`
+            : `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/global-uom-rules/`,
           token,
           body: { from_uom: fromUomId, to_uom: toUomId, multiplier: coef, status },
         });
       } else if (scope === "category") {
         await requestJson({
-          method: "POST",
-          url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/category-packages/`,
+          method: isEditMode ? "PUT" : "POST",
+          url: isEditMode
+            ? `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/category-packages/${editId}/`
+            : `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/category-packages/`,
           token,
           body: {
             category: categoryId,
@@ -211,29 +328,31 @@ export default function NsiRulesWizardPage() {
             content_uom: toUomId,
             content_qty: coef,
             status,
-            supplier_code: "",
-            barcode: "",
-            effective_from: null,
-            effective_to: null,
+            supplier_code: categoryRuleMeta.supplier_code ?? "",
+            barcode: categoryRuleMeta.barcode ?? "",
+            effective_from: categoryRuleMeta.effective_from ?? null,
+            effective_to: categoryRuleMeta.effective_to ?? null,
           },
         });
       } else if (scope === "item") {
-        // We always store pcs_weight param as kg_per_pc.
-        // Direction is derived automatically at runtime (COUNT->MASS or MASS->COUNT).
-        // from_category/to_category may be any order as match is unordered.
         await requestJson({
-          method: "POST",
-          url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`,
+          method: isEditMode ? "PUT" : "POST",
+          url: isEditMode
+            ? `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/${editId}/`
+            : `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`,
           token,
           body: {
             item: itemId,
             from_category: fromUom?.category,
             to_category: toUom?.category,
             rule_type: "pcs_weight",
-            conditions: {},
+            conditions: itemRuleMeta.conditions ?? {},
             params: { kg_per_pc: String(n(coef)) },
-            priority: 0,
+            priority: itemRuleMeta.priority ?? 0,
             status,
+            effective_from: itemRuleMeta.effective_from ?? null,
+            effective_to: itemRuleMeta.effective_to ?? null,
+            supersedes: itemRuleMeta.supersedes ?? null,
           },
         });
       }
@@ -244,11 +363,17 @@ export default function NsiRulesWizardPage() {
     }
   }
 
+  const pageTitle = isEditMode ? "Редактирование правила" : "Создание правила";
+  const pageSubtitle = isEditMode
+    ? "Измените параметры и сохраните правило."
+    : "Для болтов (оприходование PCS) можно создать правило KG -> PCS, задав вес 1 PCS.";
+  const submitLabel = isEditMode ? "Сохранить" : "Создать правило";
+
   return (
     <div className="card">
       <PageHeader
-        title="Создание правила"
-        subtitle="Для болтов (оприходование PCS) можно создать правило KG → PCS, задав вес 1 PCS."
+        title={pageTitle}
+        subtitle={pageSubtitle}
         right={<button className="btn" onClick={() => nav("/nsi/rules")}>Отмена</button>}
       />
 
@@ -258,8 +383,8 @@ export default function NsiRulesWizardPage() {
         <h4 style={{ marginTop: 0 }}>Тип правила</h4>
         <div className="row">
           <label>
-            <small>Какое правило создаём?</small><br />
-            <select value={scope} onChange={(e) => setScope(e.target.value as Scope)}>
+            <small>Какое правило создаем?</small><br />
+            <select value={scope} onChange={(e) => setScope(e.target.value as Scope)} disabled={isEditMode}>
               <option value="global">Глобальное (для всех)</option>
               <option value="category">Для категории</option>
               <option value="item">Для номенклатурной позиции</option>
@@ -284,6 +409,7 @@ export default function NsiRulesWizardPage() {
             </label>
           )}
         </div>
+        {isEditMode && <div style={{ marginTop: 8 }}><small>Тип правила фиксирован в режиме редактирования.</small></div>}
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
@@ -293,14 +419,14 @@ export default function NsiRulesWizardPage() {
           <label>
             <small>входящая ЕИ</small><br />
             <select value={fromUomId ?? ""} onChange={(e) => setFromUomId(toNum(e.target.value))}>
-              {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.code} ({uomCatsById.get(u.category)?.code ?? "—"})</option>)}
+              {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.code} ({uomCatsById.get(u.category)?.code ?? "-"})</option>)}
             </select>
           </label>
 
           <label>
             <small>итоговая ЕИ</small><br />
             <select value={toUomId ?? ""} onChange={(e) => setToUomId(toNum(e.target.value))}>
-              {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.code} ({uomCatsById.get(u.category)?.code ?? "—"})</option>)}
+              {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.code} ({uomCatsById.get(u.category)?.code ?? "-"})</option>)}
             </select>
           </label>
 
@@ -314,14 +440,15 @@ export default function NsiRulesWizardPage() {
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
               <option value="active">active</option>
               <option value="draft">draft</option>
+              <option value="archived">archived</option>
             </select>
           </label>
         </div>
 
         <div style={{ marginTop: 10 }}>
-          {scope === "global" && <small>Ограничение: обе ЕИ должны быть в <b>одной категории</b>. Сейчас: {fromCatCode} → {toCatCode}</small>}
-          {scope === "category" && <small>Ограничение: COUNT → MASS (пример: BAG → KG). Сейчас: {fromCatCode} → {toCatCode}</small>}
-          {scope === "item" && <small>Ограничение: MASS ↔ COUNT (PCS). Сейчас: {fromCatCode} → {toCatCode}</small>}
+          {scope === "global" && <small>Ограничение: обе ЕИ должны быть в <b>одной категории</b>. Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
+          {scope === "category" && <small>Ограничение: COUNT {"->"} MASS (пример: BAG {"->"} KG). Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
+          {scope === "item" && <small>Ограничение: MASS {"<->"} COUNT (PCS). Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
         </div>
       </div>
 
@@ -342,13 +469,13 @@ export default function NsiRulesWizardPage() {
               <td>
                 <div className="row" style={{ gap: 8 }}>
                   <input value={exampleInQty} onChange={(e) => setExampleInQty(e.target.value)} style={{ width: 120 }} />
-                  <span className="badge">{fromUom?.code ?? "—"}</span>
+                  <span className="badge">{fromUom?.code ?? "-"}</span>
                 </div>
               </td>
               <td>
                 <div className="row" style={{ gap: 8 }}>
                   <input value={exampleOutQty} readOnly style={{ width: 120 }} />
-                  <span className="badge">{toUom?.code ?? "—"}</span>
+                  <span className="badge">{toUom?.code ?? "-"}</span>
                 </div>
               </td>
             </tr>
@@ -359,7 +486,7 @@ export default function NsiRulesWizardPage() {
           <div style={{ marginTop: 8 }}>
             <small>
               Для болтов удобно задавать вес 1 PCS: например 0.023 (KG). Тогда:
-              KG → PCS: pcs = kg / 0.023; PCS → KG: kg = pcs × 0.023.
+              KG {"->"} PCS: pcs = kg / 0.023; PCS {"->"} KG: kg = pcs * 0.023.
             </small>
           </div>
         ) : null}
@@ -367,14 +494,14 @@ export default function NsiRulesWizardPage() {
         {validations.length > 0 && (
           <div style={{ marginTop: 10 }}>
             {validations.map((v, idx) => (
-              <div key={idx} style={{ color: "#fca5a5" }}>• {v}</div>
+              <div key={idx} style={{ color: "#fca5a5" }}>* {v}</div>
             ))}
           </div>
         )}
 
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => nav("/nsi/rules")}>Отмена</button>
-          <button className="btn primary" onClick={createRule} disabled={!canCreate}>Создать правило</button>
+          <button className="btn primary" onClick={saveRule} disabled={!canSave}>{submitLabel}</button>
         </div>
       </div>
     </div>

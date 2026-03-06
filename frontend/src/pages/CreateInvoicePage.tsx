@@ -245,13 +245,18 @@ export default function CreateInvoicePage() {
     setErr(null);
 
     const cleanLines = lines
-      .map((l, idx) => ({
-        line_no: idx + 1,
-        item_id: l.item_id,
-        qty: l.qty,
-        uom_code: l.uom_code,
-        context: {},
-      }))
+      .map((l, idx) => {
+        const it = items.find((x: any) => x.id === l.item_id);
+        return {
+          line_no: idx + 1,
+          item_id: l.item_id,
+          qty: l.qty,
+          uom_code: l.uom_code,
+          context: {
+            item_name: it?.name ?? "",
+          },
+        };
+      })
       .filter((l) => !!l.item_id && !!l.qty && !!l.uom_code);
 
     if (cleanLines.length === 0) {

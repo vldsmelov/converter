@@ -1,4 +1,5 @@
 import os
+import logging
 from io import BytesIO
 from uuid import uuid4
 
@@ -17,6 +18,36 @@ from .storage import get_minio_client, get_bucket, ensure_bucket
 from .rendering import render_invoice_xlsx, render_invoice_pdf
 
 CONVERSION_BASE_URL = os.environ["CONVERSION_BASE_URL"].rstrip("/")
+NSI_BASE_URL = os.environ.get("NSI_BASE_URL", "http://nsi:8000").rstrip("/")
+logger = logging.getLogger(__name__)
+
+
+def _fetch_item_names(item_ids: set[int], token: str) -> dict[int, str]:
+    if not item_ids:
+        return {}
+    try:
+        with httpx.Client(timeout=20) as client:
+            r = client.get(
+                f"{NSI_BASE_URL}/api/v1/items/",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if r.status_code >= 400:
+                logger.warning("Failed to fetch item names from NSI: %s %s", r.status_code, r.text[:200])
+                return {}
+            names: dict[int, str] = {}
+            for it in (r.json() or []):
+                try:
+                    iid = int(it.get("id"))
+                except Exception:
+                    continue
+                if iid in item_ids:
+                    name = str(it.get("name") or "").strip()
+                    if name:
+                        names[iid] = name
+            return names
+    except Exception:
+        logger.exception("Failed to fetch item names from NSI")
+        return {}
 
 
 @shared_task(bind=True)
@@ -94,8 +125,12 @@ def generate_invoice_outputs(self, invoice_id: int):
     inv.save(update_fields=["status", "error"])
 
     try:
-        xlsx_bytes, xlsx_name, xlsx_ct = render_invoice_xlsx(inv)
-        pdf_bytes, pdf_name, pdf_ct = render_invoice_pdf(inv)
+        token = get_service_token()
+        item_ids = {int(line.item_id) for line in inv.lines.all()}
+        item_name_by_id = _fetch_item_names(item_ids, token)
+
+        xlsx_bytes, xlsx_name, xlsx_ct = render_invoice_xlsx(inv, item_name_by_id=item_name_by_id)
+        pdf_bytes, pdf_name, pdf_ct = render_invoice_pdf(inv, item_name_by_id=item_name_by_id)
 
         client = get_minio_client()
         bucket = get_bucket()

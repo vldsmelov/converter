@@ -1,18 +1,28 @@
 # Converter
 
 Микросервисный прототип для:
-- ведения НСИ (ЕИ, категории, номенклатура, фасовки, правила),
+- ведения НСИ (ЕИ, категории, номенклатура, упаковки, правила конвертации),
 - расчета накладных,
-- генерации XLSX/PDF и скачивания из MinIO,
-- авторизации через Keycloak.
+- генерации итоговых XLSX/PDF,
+- хранения файлов в MinIO,
+- авторизации и ролей через Keycloak.
+
+## Состав сервисов
+- `keycloak` (`8080`) - аутентификация/авторизация.
+- `nsi` (`8001`) - справочники и правила.
+- `conversion` (`8003`) - расчет конвертации по данным NSI.
+- `documents` (`8002`) - накладные, расчет, генерация файлов.
+- `documents_worker` - Celery worker для фоновых задач.
+- `rabbitmq` (`5672`, `15672`) - брокер задач Celery.
+- `minio` (`9000`, `9001`) - объектное хранилище файлов.
 
 ## Быстрый старт
 1. Подготовить переменные:
-   `cp .env.example .env`
-2. Запустить backend-контур:
-   `docker compose up --build -d`
-3. Запустить UI:
-   `docker compose --profile ui up -d frontend`
+   - `Copy-Item .env.example .env -Force`
+2. Поднять backend-контур:
+   - `docker compose up --build -d`
+3. Поднять frontend:
+   - `docker compose --profile ui up -d frontend`
 4. Открыть:
    - UI: `http://localhost:5173`
    - Keycloak: `http://localhost:8080`
@@ -22,6 +32,58 @@
 - Documents: `http://localhost:8002/healthz`
 - Conversion: `http://localhost:8003/healthz`
 
+## Текущий функционал
+
+### НСИ
+- ЕИ:
+  - список, создание, редактирование, удаление.
+- Категории номенклатуры:
+  - список, создание, редактирование, удаление.
+- Номенклатура:
+  - список, создание, редактирование.
+- Упаковки:
+  - список, создание, редактирование, удаление.
+- Правила:
+  - список в виде вкладок:
+    - глобальные,
+    - правила категорий,
+    - правила номенклатуры;
+  - создание, редактирование, удаление для каждого типа.
+
+### Накладные
+- Создание накладной.
+- Проверка наличия правил конвертации при вводе строк.
+- Расчет (`calculate`).
+- Генерация итоговых файлов (`generate`).
+- Скачивание XLSX/PDF.
+
+## Изменения в экспорте файлов (актуально)
+- В итоговых XLSX/PDF используется русский набор колонок:
+  - `#`, `Товар`, `Кол-во`, `ЕИ (в документе)`, `Оприходование`, `Статус строки`.
+- В колонке `Товар` записывается **название номенклатуры**, а не `item_id`.
+- Для имени товара используется:
+  1. `line.context.item_name` (если передан),
+  2. fallback-запрос в NSI по `item_id`,
+  3. резервный вариант `item_id=...`.
+- PDF-генерация переведена на Unicode-шрифт `DejaVuSans` (в Docker-образ `documents` добавлена установка `fonts-dejavu-core`), чтобы корректно печаталась кириллица.
+
+## Роли Keycloak (основные)
+- NSI: `nsi.uom.*`, `nsi.item.*`, `nsi.package.*`, `nsi.rule.*`
+- Conversion: `conversion.convert`, `conversion.ping`
+- Documents: `documents.invoice.read`, `documents.invoice.write`, `documents.invoice.calculate`, `documents.invoice.generate`
+
+## Полезные команды
+- Полный перезапуск:
+  - `docker compose down -v --remove-orphans`
+  - `docker compose up -d --build`
+- Пересобрать/перезапустить документы:
+  - `docker compose up -d --build documents documents_worker`
+- Сборка frontend:
+  - `docker run --rm -v ${PWD}:/repo -w /repo/frontend node:20-alpine sh -lc "npm ci && npm run build"`
+- E2E smoke:
+  - `docker compose --profile tools run --rm e2e pytest -q tests/test_invoice_flow.py`
+  - `docker compose --profile tools run --rm e2e pytest -q tests/test_end_to_end.py`
+
 ## Документация
-- Архитектура и поток данных: [docs/RUNBOOK.md](docs/RUNBOOK.md)
+- Операционный runbook: [docs/RUNBOOK.md](docs/RUNBOOK.md)
 - Frontend заметки: [frontend/README.md](frontend/README.md)

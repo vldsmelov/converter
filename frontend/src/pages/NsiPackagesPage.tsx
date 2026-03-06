@@ -41,6 +41,22 @@ export default function NsiPackagesPage() {
   }
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
 
+  async function remove(id: number) {
+    if (!token) return;
+    if (!confirm("Удалить упаковку?")) return;
+    setErr(null);
+    try {
+      await requestJson({
+        method: "DELETE",
+        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/packages/${id}/`,
+        token,
+      });
+      await load();
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    }
+  }
+
   return (
     <div className="card">
       <PageHeader
@@ -57,7 +73,7 @@ export default function NsiPackagesPage() {
 
       <table style={{ marginTop: 12 }}>
         <thead>
-          <tr><th>ID</th><th>Позиция</th><th>Правило</th><th>Статус</th></tr>
+          <tr><th>ID</th><th>Позиция</th><th>Правило</th><th>Статус</th><th></th></tr>
         </thead>
         <tbody>
           {pkgs.map((p: any) => (
@@ -66,9 +82,15 @@ export default function NsiPackagesPage() {
               <td>{itemName(p.item)}</td>
               <td><span className="badge">1 {uomCode(p.package_uom)}</span> = <b>{p.content_qty}</b> {uomCode(p.content_uom)}</td>
               <td>{p.status}</td>
+              <td style={{ textAlign: "right" }}>
+                <div className="row" style={{ justifyContent: "flex-end" }}>
+                  <button className="btn" onClick={() => nav(`/nsi/packages/${p.id}/edit`)}>Редактировать</button>
+                  <button className="btn" onClick={() => remove(p.id)}>Удалить</button>
+                </div>
+              </td>
             </tr>
           ))}
-          {pkgs.length === 0 && <tr><td colSpan={4}><small>Пока нет упаковок.</small></td></tr>}
+          {pkgs.length === 0 && <tr><td colSpan={5}><small>Пока нет упаковок.</small></td></tr>}
         </tbody>
       </table>
     </div>

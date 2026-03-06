@@ -34,6 +34,22 @@ export default function NsiUomsPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
 
+  async function remove(id: number) {
+    if (!token) return;
+    if (!confirm("Удалить ЕИ?")) return;
+    setErr(null);
+    try {
+      await requestJson({
+        method: "DELETE",
+        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/${id}/`,
+        token,
+      });
+      await load();
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    }
+  }
+
   return (
     <div className="card">
       <PageHeader
@@ -65,7 +81,12 @@ export default function NsiUomsPage() {
               <td><small>{u.factor_to_base}</small></td>
               <td>{u.precision}</td>
               <td style={{ textAlign: "right" }}>
-                <button className="btn" onClick={() => nav(`/nsi/uoms/${u.id}/edit`)}>Редактировать</button>
+                <button className="btn" onClick={() => nav(`/nsi/uoms/${u.id}/edit`)} style={{ marginRight: 8 }}>
+                  Редактировать
+                </button>
+                <button className="btn" onClick={() => remove(u.id)}>
+                  Удалить
+                </button>
               </td>
             </tr>
           ))}

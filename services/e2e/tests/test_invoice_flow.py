@@ -215,9 +215,9 @@ def test_invoice_calculate_and_generate_e2e():
             "supplier": "ACME",
             "doc_date": "2026-03-03",
             "lines": [
-                {"line_no": 1, "item_id": item_id, "qty": "1.5", "uom_code": "TON", "context": {}},
-                {"line_no": 2, "item_id": item_id, "qty": "2", "uom_code": "BAG", "context": {}},
-                {"line_no": 3, "item_id": item_id, "qty": "10", "uom_code": "PCS", "context": {}},
+                {"line_no": 1, "item_id": item_id, "qty": "1.5", "uom_code": "TON", "context": {"item_name": "E2E Test Item"}},
+                {"line_no": 2, "item_id": item_id, "qty": "2", "uom_code": "BAG", "context": {"item_name": "E2E Test Item"}},
+                {"line_no": 3, "item_id": item_id, "qty": "10", "uom_code": "PCS", "context": {"item_name": "E2E Test Item"}},
             ],
         },
     )
@@ -265,7 +265,7 @@ def test_invoice_calculate_and_generate_e2e():
     ws = wb.active
 
     # Header row should be present
-    assert ws["A1"].value == "Invoice Number"
+    assert ws["A1"].value == "Номер накладной"
 
     # Find data rows by "Line" in column A starting from row 6
     rows = []
@@ -275,13 +275,16 @@ def test_invoice_calculate_and_generate_e2e():
             rows.append((line_no, r_i))
     assert {ln for ln, _ in rows} == {1, 2, 3}
 
-    # Posting Qty is column E in our renderer
+    # Posting is "qty + uom" in column E
     r1 = dict(rows)[1]
     r2 = dict(rows)[2]
     r3 = dict(rows)[3]
-    assert Decimal(str(ws[f"E{r1}"].value)) == Decimal("1500.000000")
-    assert Decimal(str(ws[f"E{r2}"].value)) == Decimal("50.000000")
-    assert Decimal(str(ws[f"E{r3}"].value)) == Decimal("25.000000")
+    assert str(ws[f"E{r1}"].value) == "1500.000000 KG"
+    assert str(ws[f"E{r2}"].value) == "50.000000 KG"
+    assert str(ws[f"E{r3}"].value) == "25.000000 KG"
+    assert str(ws[f"F{r1}"].value) == "ok"
+    assert str(ws[f"F{r2}"].value) == "ok"
+    assert str(ws[f"F{r3}"].value) == "ok"
 
     # Download PDF and validate it looks like a PDF
     rp = requests.get(pdf_url, headers=_h(clerk_token), timeout=60)

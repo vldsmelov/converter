@@ -15,6 +15,7 @@ import NsiItemCategoryCreatePage from "./NsiItemCategoryCreatePage";
 import NsiItemCategoryEditPage from "./NsiItemCategoryEditPage";
 import NsiPackagesPage from "./NsiPackagesPage";
 import NsiPackageCreatePage from "./NsiPackageCreatePage";
+import NsiPackageEditPage from "./NsiPackageEditPage";
 import NsiRulesPage from "./NsiRulesPage";
 import NsiRulesWizardPage from "./NsiRulesWizardPage";
 
@@ -67,8 +68,10 @@ export default function App() {
         <Route path="/nsi/item-categories/:id/edit" element={<NsiItemCategoryEditPage />} />
         <Route path="/nsi/packages" element={<NsiPackagesPage />} />
         <Route path="/nsi/packages/new" element={<NsiPackageCreatePage />} />
+        <Route path="/nsi/packages/:id/edit" element={<NsiPackageEditPage />} />
         <Route path="/nsi/rules" element={<NsiRulesPage />} />
         <Route path="/nsi/rules/new" element={<NsiRulesWizardPage />} />
+        <Route path="/nsi/rules/:scope/:id/edit" element={<NsiRulesWizardPage />} />
       </Routes>
     </div>
   );

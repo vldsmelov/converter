@@ -182,9 +182,9 @@ def test_openapi_and_full_flow():
                 "supplier": "ACME",
                 "doc_date": date.today().isoformat(),
                 "lines": [
-                    {"line_no": 1, "item_id": item_id, "qty": "1.5", "uom_code": "TON", "context": {}},
-                    {"line_no": 2, "item_id": item_id, "qty": "2", "uom_code": "BAG", "context": {}},
-                    {"line_no": 3, "item_id": item_id, "qty": "10", "uom_code": "PCS", "context": {}},
+                    {"line_no": 1, "item_id": item_id, "qty": "1.5", "uom_code": "TON", "context": {"item_name": "E2E item"}},
+                    {"line_no": 2, "item_id": item_id, "qty": "2", "uom_code": "BAG", "context": {"item_name": "E2E item"}},
+                    {"line_no": 3, "item_id": item_id, "qty": "10", "uom_code": "PCS", "context": {"item_name": "E2E item"}},
                 ],
             },
         )
@@ -248,7 +248,7 @@ def test_openapi_and_full_flow():
 
         wb = load_workbook(filename=BytesIO(x.content))
         ws = wb.active
-        assert ws["A1"].value == "Invoice Number"
+        assert ws["A1"].value == "Номер накладной"
         assert ws["B1"].value == inv_no
 
         p = client.get(pdf["presigned_url"])

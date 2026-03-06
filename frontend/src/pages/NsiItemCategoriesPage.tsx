@@ -32,6 +32,22 @@ export default function NsiItemCategoriesPage() {
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
 
+  async function remove(id: number) {
+    if (!token) return;
+    if (!confirm("Удалить категорию?")) return;
+    setErr(null);
+    try {
+      await requestJson({
+        method: "DELETE",
+        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/${id}/`,
+        token,
+      });
+      await load();
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+    }
+  }
+
   return (
     <div className="card">
       <PageHeader
@@ -65,7 +81,12 @@ export default function NsiItemCategoriesPage() {
               <td>{uomCode(c.default_uom)}</td>
               <td>{String(c.is_active)}</td>
               <td style={{ textAlign: "right" }}>
-                <button className="btn" onClick={() => nav(`/nsi/item-categories/${c.id}/edit`)}>Редактировать</button>
+                <button className="btn" onClick={() => nav(`/nsi/item-categories/${c.id}/edit`)} style={{ marginRight: 8 }}>
+                  Редактировать
+                </button>
+                <button className="btn" onClick={() => remove(c.id)}>
+                  Удалить
+                </button>
               </td>
             </tr>
           ))}
