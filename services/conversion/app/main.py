@@ -294,7 +294,9 @@ async def find_category_path_and_convert(
                 "context": context,
                 "on_date": on_date.isoformat(),
             }
-            resp = await nsi_post(client, token, "/api/v1/rules/match/", payload)
+            # NOTE: endpoint is registered as "/api/v1/rules/match" (without trailing slash).
+            # With trailing slash Django router can resolve to "/rules/{pk}/" and return 403/405.
+            resp = await nsi_post(client, token, "/api/v1/rules/match", payload)
             if resp.get("_not_found"):
                 continue
 

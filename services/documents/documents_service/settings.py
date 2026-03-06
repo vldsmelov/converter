@@ -7,14 +7,12 @@ import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "django-insecure-g*(ui%+x(cstn^py!xwt-qi4h!aj82@qyvmhmr6f&z@^mbt9_a"
-
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
-
-
 def _split_csv(v: str) -> list[str]:
     return [x.strip() for x in v.split(",") if x.strip()]
+
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret")
+DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
+ALLOWED_HOSTS = _split_csv(os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1"))
 
 
 # Application definition

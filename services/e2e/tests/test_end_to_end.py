@@ -2,6 +2,7 @@ import os
 import time
 import uuid
 from datetime import date
+from io import BytesIO
 
 import httpx
 from openpyxl import load_workbook
@@ -98,7 +99,7 @@ def test_openapi_and_full_flow():
     for base in (NSI_URL, DOCS_URL):
         r = httpx.get(
             f"{base}/api/schema/",
-            headers={**auth_headers(token), "Origin": ORIGIN},
+            headers={**auth_headers(token), "Origin": ORIGIN, "Accept": "application/json"},
             timeout=10,
         )
         assert r.status_code == 200
@@ -245,7 +246,7 @@ def test_openapi_and_full_flow():
         # XLSX is a zip file => starts with PK
         assert x.content[:2] == b"PK"
 
-        wb = load_workbook(filename=bytes(x.content))
+        wb = load_workbook(filename=BytesIO(x.content))
         ws = wb.active
         assert ws["A1"].value == "Invoice Number"
         assert ws["B1"].value == inv_no

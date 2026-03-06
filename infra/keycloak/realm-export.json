@@ -42,7 +42,7 @@
       "serviceAccountsEnabled": true,
       "directAccessGrantsEnabled": false,
       "standardFlowEnabled": false,
-      "secret": "0W8cjpHVNz9VC1Km0jQMIOSgPlbZcAV2"
+      "secret": "change-me"
     },
     {
       "clientId": "frontend",

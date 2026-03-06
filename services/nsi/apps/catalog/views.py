@@ -1,5 +1,4 @@
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
 
 from apps.authn.role_permissions import RoleByMethodPermission
 
@@ -10,7 +9,9 @@ from .serializers import CategoryPackageSpecSerializer, ItemCategorySerializer
 class ItemCategoryViewSet(viewsets.ModelViewSet):
     queryset = ItemCategory.objects.all().select_related("default_uom").order_by("name", "id")
     serializer_class = ItemCategorySerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [RoleByMethodPermission]
+    read_role = "nsi.item.read"
+    write_role = "nsi.item.write"
 
 
 class CategoryPackageSpecViewSet(viewsets.ModelViewSet):

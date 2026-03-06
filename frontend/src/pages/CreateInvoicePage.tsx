@@ -172,7 +172,8 @@ export default function CreateInvoicePage() {
         },
       });
 
-      const resultUom = up(res?.posting_uom_code);
+      const resultUom = up(res?.to?.uom ?? res?.posting_uom_code);
+      const resultQty = String(res?.to?.qty ?? res?.posting_qty ?? "");
       const ok = posting ? (resultUom === up(posting)) : true;
 
       setChecks((m) => ({
@@ -180,8 +181,8 @@ export default function CreateInvoicePage() {
         [line.key]: {
           state: ok ? "ok" : "mismatch",
           message: ok
-            ? `OK: 1 ${up(line.uom_code)} → ${res.posting_qty} ${up(res.posting_uom_code)}`
-            : `Есть конвертация, но итоговая ЕИ (${up(res.posting_uom_code)}) ≠ оприходованию (${up(posting)}).`,
+            ? `OK: 1 ${up(line.uom_code)} → ${resultQty} ${resultUom}`
+            : `Есть конвертация, но итоговая ЕИ (${resultUom}) ≠ оприходованию (${up(posting)}).`,
           suggestedUrl: ok ? undefined : (it ? suggestRuleUrl({ item: it, fromCode: line.uom_code }) : undefined),
         },
       }));
@@ -356,7 +357,7 @@ export default function CreateInvoicePage() {
                         <div className="row" style={{ gap: 8, justifyContent: "flex-start" }}>
                           <span className="badge">не совпадает ЕИ</span>
                           {ch.suggestedUrl ? (
-                            <button className="btn" onClick={() => nav(ch.suggestedUrl)}>Создать правило</button>
+                            <button className="btn" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
                           ) : null}
                         </div>
                         {ch.message ? <div><small>{ch.message}</small></div> : null}
@@ -366,7 +367,7 @@ export default function CreateInvoicePage() {
                         <div className="row" style={{ gap: 8, justifyContent: "flex-start" }}>
                           <span className="badge">нет правила</span>
                           {ch.suggestedUrl ? (
-                            <button className="btn" onClick={() => nav(ch.suggestedUrl)}>Создать правило</button>
+                            <button className="btn" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
                           ) : null}
                         </div>
                         {ch.message ? <div><small>{ch.message}</small></div> : null}

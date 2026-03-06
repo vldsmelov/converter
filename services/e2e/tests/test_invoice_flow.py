@@ -86,6 +86,23 @@ def _ensure_uom(token: str, code: str, name: str, category_id: int, factor_to_ba
     return int(created["id"])
 
 
+def _ensure_item_category(token: str, name: str, default_uom_id: int) -> int:
+    cats = _get_json(f"{NSI_URL}/api/v1/item-categories/", token)
+    for c in cats:
+        if c["name"] == name:
+            return int(c["id"])
+    created = _post_json(
+        f"{NSI_URL}/api/v1/item-categories/",
+        token,
+        {
+            "name": name,
+            "default_uom": default_uom_id,
+            "is_active": True,
+        },
+    )
+    return int(created["id"])
+
+
 def _create_item_with_rules(token: str):
     # categories
     cats = _get_json(f"{NSI_URL}/api/v1/uom-categories/", token)
@@ -96,6 +113,7 @@ def _create_item_with_rules(token: str):
     ton_id = _ensure_uom(token, "TON", "Tonne", mass_id, "1000", 3)
     pcs_id = _ensure_uom(token, "PCS", "Pieces", count_id, "1", 0)
     bag_id = _ensure_uom(token, "BAG", "Bag", count_id, "1", 0)
+    category_id = _ensure_item_category(token, "E2E Категория", kg_id)
 
     sku = f"E2E-ITEM-{uuid.uuid4().hex[:8]}"
     item = _post_json(
@@ -104,6 +122,7 @@ def _create_item_with_rules(token: str):
         {
             "sku": sku,
             "name": "E2E Test Item",
+            "category": category_id,
             "is_active": True,
             "policy": {
                 "storage_uom": kg_id,
@@ -179,7 +198,9 @@ def test_invoice_calculate_and_generate_e2e():
     _wait_until(lambda: requests.get(f"{DOCUMENTS_URL}/healthz", timeout=5).status_code == 200, err="Documents not ready")
 
     operator_token = _token("operator", "operator")
-    clerk_token = _token("clerk", "clerk")
+    # Realm export in this repo contains "operator" and service account users.
+    # Use operator for end-to-end document flow.
+    clerk_token = operator_token
 
     # 1) Create item + package + rule via NSI (operator)
     ctx = _create_item_with_rules(operator_token)
