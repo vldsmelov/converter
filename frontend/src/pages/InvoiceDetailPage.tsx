@@ -212,7 +212,7 @@ export default function InvoiceDetailPage() {
             {busy === "generate" ? "Генерирую..." : "Сгенерировать XLSX/PDF"}
           </button>
           <div style={{ flex: 1 }} />
-          <span className="badge">new -> calculating -> calculated -> generating -> generated</span>
+          <span className="badge">new → calculating → calculated → generating → generated</span>
         </div>
       </div>
 

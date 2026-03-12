@@ -531,7 +531,7 @@ export default function CreateInvoicePage() {
 
         <div style={{ marginTop: 10 }}>
           <small>Пример товара (подсказка):</small><br />
-          <span className="badge">{exampleRow.name} - {exampleRow.cat} -> хранение: {exampleRow.posting}</span>
+            <span className="badge">{exampleRow.name} - {exampleRow.cat} → хранение: {exampleRow.posting}</span>
         </div>
 
         <div className="row" style={{ marginTop: 12 }}>
