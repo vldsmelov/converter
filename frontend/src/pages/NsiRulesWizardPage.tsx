@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { requestJson } from "../api/request";
+import { ApiError, requestJson } from "../api/request";
 import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
 
@@ -26,6 +26,41 @@ type ItemRuleMeta = {
   effective_from: string | null;
   effective_to: string | null;
   supersedes: number | null;
+};
+
+type PairRuleSpec = {
+  ruleType: ItemRuleType;
+  paramKey: string;
+  label: string;
+  example: string;
+};
+
+type CompositeRuleStep = PairRuleSpec & {
+  fromCategory: string;
+  toCategory: string;
+};
+
+const CATEGORY_CODES = ["MASS", "VOLUME", "LENGTH", "COUNT"] as const;
+
+const PAIR_RULE_SPECS: Record<string, PairRuleSpec> = {
+  "COUNT|MASS": {
+    ruleType: "pcs_weight",
+    paramKey: "kg_per_pc",
+    label: "Вес 1 PCS (kg_per_pc, кг)",
+    example: "0.023",
+  },
+  "LENGTH|MASS": {
+    ruleType: "kg_per_m",
+    paramKey: "kg_per_m",
+    label: "Линейная масса (kg_per_m, кг/м)",
+    example: "1",
+  },
+  "MASS|VOLUME": {
+    ruleType: "density",
+    paramKey: "density_kg_per_l",
+    label: "Плотность (density_kg_per_l, кг/л)",
+    example: "1",
+  },
 };
 
 function n(s: unknown): number {
@@ -87,6 +122,89 @@ function inferRuleTypeByPair(fromCatCode: string, toCatCode: string): ItemRuleTy
   if (ruleTypeFitsPair("pcs_weight", fromCatCode, toCatCode)) return "pcs_weight";
   if (ruleTypeFitsPair("kg_per_m", fromCatCode, toCatCode)) return "kg_per_m";
   if (ruleTypeFitsPair("density", fromCatCode, toCatCode)) return "density";
+  return null;
+}
+
+function pairKey(a: string, b: string): string {
+  return [up(a), up(b)].sort().join("|");
+}
+
+function pairRuleSpec(a: string, b: string): PairRuleSpec | null {
+  return PAIR_RULE_SPECS[pairKey(a, b)] ?? null;
+}
+
+function buildCategoryPath(startCatCode: string, targetCatCode: string): string[] {
+  const start = up(startCatCode);
+  const target = up(targetCatCode);
+
+  if (!CATEGORY_CODES.includes(start as any) || !CATEGORY_CODES.includes(target as any)) return [];
+  if (start === target) return [start];
+
+  const queue: Array<{ cat: string; path: string[] }> = [{ cat: start, path: [start] }];
+
+  while (queue.length > 0) {
+    const cur = queue.shift();
+    if (!cur) break;
+    if (cur.path.length > 4) continue;
+
+    for (const next of CATEGORY_CODES) {
+      const nextCat = String(next);
+      if (cur.path.includes(nextCat)) continue;
+      if (!pairRuleSpec(cur.cat, nextCat)) continue;
+
+      const nextPath = [...cur.path, nextCat];
+      if (nextCat === target) return nextPath;
+      queue.push({ cat: nextCat, path: nextPath });
+    }
+  }
+
+  return [];
+}
+
+function buildCompositeRuleSteps(fromCatCode: string, toCatCode: string): CompositeRuleStep[] {
+  const path = buildCategoryPath(fromCatCode, toCatCode);
+  if (path.length < 3) return [];
+
+  const steps: CompositeRuleStep[] = [];
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const fromCategory = path[i];
+    const toCategory = path[i + 1];
+    const spec = pairRuleSpec(fromCategory, toCategory);
+    if (!spec) return [];
+    steps.push({ fromCategory, toCategory, ...spec });
+  }
+  return steps;
+}
+
+function compositeStepId(step: CompositeRuleStep): string {
+  return `${step.fromCategory}_${step.toCategory}_${step.ruleType}`;
+}
+
+function applyRuleStepByCategory(
+  qty: number,
+  fromCategory: string,
+  toCategory: string,
+  ruleType: ItemRuleType,
+  k: number
+): number | null {
+  if (!Number.isFinite(qty) || !Number.isFinite(k) || k <= 0) return null;
+  const from = up(fromCategory);
+  const to = up(toCategory);
+
+  if (ruleType === "density") {
+    if (from === "VOLUME" && to === "MASS") return qty * k;
+    if (from === "MASS" && to === "VOLUME") return qty / k;
+    return null;
+  }
+
+  if (ruleType === "kg_per_m") {
+    if (from === "LENGTH" && to === "MASS") return qty * k;
+    if (from === "MASS" && to === "LENGTH") return qty / k;
+    return null;
+  }
+
+  if (from === "COUNT" && to === "MASS") return qty * k;
+  if (from === "MASS" && to === "COUNT") return qty / k;
   return null;
 }
 
@@ -178,6 +296,25 @@ export default function NsiRulesWizardPage() {
 
   const fromCatCode = fromUom ? (uomCatsById.get(fromUom.category)?.code ?? "-") : "-";
   const toCatCode = toUom ? (uomCatsById.get(toUom.category)?.code ?? "-") : "-";
+  const catIdByCode = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of uomCats) {
+      const code = up(c?.code);
+      const id = Number(c?.id);
+      if (code && Number.isFinite(id)) m.set(code, id);
+    }
+    return m;
+  }, [uomCats]);
+
+  const inferredRuleType = useMemo(() => inferRuleTypeByPair(fromCatCode, toCatCode), [fromCatCode, toCatCode]);
+  const compositeRuleSteps = useMemo(() => {
+    if (scope !== "item" || isEditMode) return [];
+    if (!fromUom || !toUom) return [];
+    if (inferredRuleType) return [];
+    return buildCompositeRuleSteps(fromCatCode, toCatCode);
+  }, [scope, isEditMode, fromUom, toUom, inferredRuleType, fromCatCode, toCatCode]);
+  const useCompositeMode = scope === "item" && !isEditMode && compositeRuleSteps.length > 0;
+  const [compositeParams, setCompositeParams] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (scope !== "item") return;
@@ -188,6 +325,22 @@ export default function NsiRulesWizardPage() {
     }
   }, [scope, fromCatCode, toCatCode, isEditMode, preRuleType]);
 
+  useEffect(() => {
+    if (!useCompositeMode) return;
+    setCompositeParams((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const step of compositeRuleSteps) {
+        const id = compositeStepId(step);
+        if (!next[id]) {
+          next[id] = step.example;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [useCompositeMode, compositeRuleSteps]);
+
   const exampleText = useMemo(() => {
     if (scope === "global") return "Пример товара: любой товар";
     if (scope === "category") return `Пример товара: любой товар из категории "${itemCatById.get(categoryId ?? -1)?.name ?? "-"}"`;
@@ -197,6 +350,22 @@ export default function NsiRulesWizardPage() {
 
   const exampleOutQty = useMemo(() => {
     const inQ = n(exampleInQty);
+    if (scope === "item" && useCompositeMode) {
+      let curQty = inQ;
+      let curCat = up(fromCatCode);
+
+      for (const step of compositeRuleSteps) {
+        const id = compositeStepId(step);
+        const k = n(compositeParams[id]);
+        const nextQty = applyRuleStepByCategory(curQty, curCat, step.toCategory, step.ruleType, k);
+        if (nextQty === null) return "-";
+        curQty = nextQty;
+        curCat = up(step.toCategory);
+      }
+
+      return curCat === up(toCatCode) ? fmt(curQty, 6) : "-";
+    }
+
     const k = n(coef);
     if (k <= 0) return "-";
 
@@ -219,12 +388,12 @@ export default function NsiRulesWizardPage() {
     }
 
     return fmt(inQ * k, 6);
-  }, [exampleInQty, coef, scope, fromCatCode, toCatCode, itemRuleType]);
+  }, [exampleInQty, coef, scope, fromCatCode, toCatCode, itemRuleType, useCompositeMode, compositeRuleSteps, compositeParams]);
 
   const validations = useMemo(() => {
     const v: string[] = [];
     if (!fromUom || !toUom) v.push("Выберите входящую и итоговую ЕИ.");
-    if (n(coef) <= 0) v.push("Параметр коэффициента должен быть > 0.");
+    if (!useCompositeMode && n(coef) <= 0) v.push("Параметр коэффициента должен быть > 0.");
 
     if (scope === "global") {
       if (fromUom && toUom && fromUom.category !== toUom.category) {
@@ -240,18 +409,27 @@ export default function NsiRulesWizardPage() {
 
     if (scope === "item") {
       if (!itemId) v.push("Выберите номенклатурную позицию.");
-      if (!ruleTypeFitsPair(itemRuleType, fromCatCode, toCatCode)) {
-        v.push(`Выбранный тип правила не подходит для пары категорий (${fromCatCode} -> ${toCatCode}).`);
-      }
+      if (useCompositeMode) {
+        compositeRuleSteps.forEach((step, idx) => {
+          const id = compositeStepId(step);
+          if (n(compositeParams[id]) <= 0) {
+            v.push(`Заполните коэффициент для шага ${idx + 1} (${step.paramKey}).`);
+          }
+        });
+      } else {
+        if (!ruleTypeFitsPair(itemRuleType, fromCatCode, toCatCode)) {
+          v.push(`Выбранный тип правила не подходит для пары категорий (${fromCatCode} -> ${toCatCode}).`);
+        }
 
-      if (itemRuleType === "pcs_weight") {
-        if (fromCatCode === "COUNT" && up(fromUom?.code) !== "PCS") v.push("Для COUNT используйте ЕИ PCS.");
-        if (toCatCode === "COUNT" && up(toUom?.code) !== "PCS") v.push("Для COUNT используйте ЕИ PCS.");
+        if (itemRuleType === "pcs_weight") {
+          if (fromCatCode === "COUNT" && up(fromUom?.code) !== "PCS") v.push("Для COUNT используйте ЕИ PCS.");
+          if (toCatCode === "COUNT" && up(toUom?.code) !== "PCS") v.push("Для COUNT используйте ЕИ PCS.");
+        }
       }
     }
 
     return v;
-  }, [scope, fromUom, toUom, coef, categoryId, itemId, fromCatCode, toCatCode, itemRuleType]);
+  }, [scope, fromUom, toUom, coef, categoryId, itemId, fromCatCode, toCatCode, itemRuleType, useCompositeMode, compositeRuleSteps, compositeParams]);
 
   const canSave = validations.length === 0 && (!isEditMode || !!editId);
 
@@ -441,30 +619,95 @@ export default function NsiRulesWizardPage() {
           },
         });
       } else {
-        const params: Record<string, string> = {
-          [ruleParamKey(itemRuleType)]: String(n(coef)),
-        };
+        const rulesBaseUrl = `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`;
 
-        await requestJson({
-          method: isEditMode ? "PUT" : "POST",
-          url: isEditMode
-            ? `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/${editId}/`
-            : `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`,
-          token,
-          body: {
-            item: itemId,
-            from_category: fromUom?.category,
-            to_category: toUom?.category,
-            rule_type: itemRuleType,
-            conditions: itemRuleMeta.conditions ?? {},
-            params,
-            priority: itemRuleMeta.priority ?? 0,
-            status,
-            effective_from: itemRuleMeta.effective_from ?? null,
-            effective_to: itemRuleMeta.effective_to ?? null,
-            supersedes: itemRuleMeta.supersedes ?? null,
-          },
-        });
+        if (useCompositeMode) {
+          if (!itemId) throw new Error("Выберите номенклатурную позицию.");
+
+          for (const step of compositeRuleSteps) {
+            const fromCategoryId = catIdByCode.get(up(step.fromCategory));
+            const toCategoryId = catIdByCode.get(up(step.toCategory));
+            if (!fromCategoryId || !toCategoryId) {
+              throw new Error(`Не найдены категории ЕИ для шага ${step.fromCategory} -> ${step.toCategory}.`);
+            }
+
+            const id = compositeStepId(step);
+            const stepValue = String(n(compositeParams[id]));
+            const body = {
+              item: itemId,
+              from_category: fromCategoryId,
+              to_category: toCategoryId,
+              rule_type: step.ruleType,
+              conditions: itemRuleMeta.conditions ?? {},
+              params: { [step.paramKey]: stepValue },
+              priority: itemRuleMeta.priority ?? 0,
+              status,
+              effective_from: itemRuleMeta.effective_from ?? null,
+              effective_to: itemRuleMeta.effective_to ?? null,
+              supersedes: itemRuleMeta.supersedes ?? null,
+            };
+
+            let matchedRule: any = null;
+            try {
+              const matched = await requestJson<any>({
+                method: "POST",
+                url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/match`,
+                token,
+                body: {
+                  item: itemId,
+                  from_category: step.fromCategory,
+                  to_category: step.toCategory,
+                  context: {},
+                  on_date: new Date().toISOString().slice(0, 10),
+                },
+              });
+              matchedRule = matched?.rule ?? null;
+            } catch (e: any) {
+              if (!(e instanceof ApiError) || e.status !== 404) throw e;
+            }
+
+            if (matchedRule && matchedRule.item === itemId && matchedRule.rule_type === step.ruleType) {
+              await requestJson({
+                method: "PUT",
+                url: `${rulesBaseUrl}${matchedRule.id}/`,
+                token,
+                body,
+              });
+            } else {
+              await requestJson({
+                method: "POST",
+                url: rulesBaseUrl,
+                token,
+                body,
+              });
+            }
+          }
+        } else {
+          const params: Record<string, string> = {
+            [ruleParamKey(itemRuleType)]: String(n(coef)),
+          };
+
+          await requestJson({
+            method: isEditMode ? "PUT" : "POST",
+            url: isEditMode
+              ? `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/${editId}/`
+              : rulesBaseUrl,
+            token,
+            body: {
+              item: itemId,
+              from_category: fromUom?.category,
+              to_category: toUom?.category,
+              rule_type: itemRuleType,
+              conditions: itemRuleMeta.conditions ?? {},
+              params,
+              priority: itemRuleMeta.priority ?? 0,
+              status,
+              effective_from: itemRuleMeta.effective_from ?? null,
+              effective_to: itemRuleMeta.effective_to ?? null,
+              supersedes: itemRuleMeta.supersedes ?? null,
+            },
+          });
+        }
       }
 
       nav("/nsi/rules");
@@ -477,7 +720,7 @@ export default function NsiRulesWizardPage() {
   const pageSubtitle = isEditMode
     ? "Измените параметры и сохраните правило."
     : "Создайте правило перевода между ЕИ. Для межкатегорийного перевода выбирайте тип правила в блоке параметров.";
-  const submitLabel = isEditMode ? "Сохранить" : "Создать правило";
+  const submitLabel = isEditMode ? "Сохранить" : (useCompositeMode ? "Создать набор правил" : "Создать правило");
 
   return (
     <div className="card">
@@ -521,7 +764,7 @@ export default function NsiRulesWizardPage() {
 
               <label>
                 <small>Тип конвертации</small><br />
-                <select value={itemRuleType} onChange={(e) => setItemRuleType(e.target.value as ItemRuleType)}>
+                <select value={itemRuleType} onChange={(e) => setItemRuleType(e.target.value as ItemRuleType)} disabled={useCompositeMode}>
                   <option value="pcs_weight">COUNT ↔ MASS (pcs_weight)</option>
                   <option value="kg_per_m">LENGTH ↔ MASS (kg_per_m)</option>
                   <option value="density">MASS ↔ VOLUME (density)</option>
@@ -530,6 +773,14 @@ export default function NsiRulesWizardPage() {
             </>
           )}
         </div>
+
+        {useCompositeMode && (
+          <div style={{ marginTop: 8 }}>
+            <small>
+              Прямого правила для пары {fromCatCode} {"->"} {toCatCode} нет. Будет создан набор правил по шагам через промежуточную категорию.
+            </small>
+          </div>
+        )}
 
         {isEditMode && <div style={{ marginTop: 8 }}><small>Тип области фиксирован в режиме редактирования.</small></div>}
       </div>
@@ -552,10 +803,12 @@ export default function NsiRulesWizardPage() {
             </select>
           </label>
 
-          <label>
-            <small>{coefLabel}</small><br />
-            <input value={coef} onChange={(e) => setCoef(e.target.value)} />
-          </label>
+          {!(scope === "item" && useCompositeMode) && (
+            <label>
+              <small>{coefLabel}</small><br />
+              <input value={coef} onChange={(e) => setCoef(e.target.value)} />
+            </label>
+          )}
 
           <label>
             <small>Статус</small><br />
@@ -567,10 +820,31 @@ export default function NsiRulesWizardPage() {
           </label>
         </div>
 
+        {scope === "item" && useCompositeMode && (
+          <div style={{ marginTop: 10 }}>
+            {compositeRuleSteps.map((step, idx) => {
+              const id = compositeStepId(step);
+              return (
+                <div key={id} className="row" style={{ alignItems: "center", gap: 8, marginTop: idx === 0 ? 0 : 6 }}>
+                  <span className="badge">Шаг {idx + 1}</span>
+                  <small>{step.fromCategory} {"->"} {step.toCategory} ({step.ruleType})</small>
+                  <input
+                    value={compositeParams[id] ?? ""}
+                    onChange={(e) => setCompositeParams((m) => ({ ...m, [id]: e.target.value }))}
+                    style={{ width: 140 }}
+                  />
+                  <small>{step.label}</small>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <div style={{ marginTop: 10 }}>
           {scope === "global" && <small>Ограничение: обе ЕИ должны быть в <b>одной категории</b>. Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
           {scope === "category" && <small>Ограничение: COUNT {"->"} MASS (пример: BAG {"->"} KG). Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
-          {scope === "item" && <small>{ruleHint(itemRuleType)} Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
+          {scope === "item" && !useCompositeMode && <small>{ruleHint(itemRuleType)} Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
+          {scope === "item" && useCompositeMode && <small>Составной перевод. Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
         </div>
       </div>
 
@@ -604,10 +878,18 @@ export default function NsiRulesWizardPage() {
           </tbody>
         </table>
 
-        {scope === "item" ? (
+        {scope === "item" && !useCompositeMode ? (
           <div style={{ marginTop: 8 }}>
             <small>
               Параметр для типа правила: <b>{ruleParamKey(itemRuleType)}</b>. Пример рассчитывается из выбранных ЕИ и коэффициента.
+            </small>
+          </div>
+        ) : null}
+
+        {scope === "item" && useCompositeMode ? (
+          <div style={{ marginTop: 8 }}>
+            <small>
+              Для пары {fromCatCode} {"->"} {toCatCode} требуется несколько параметров: {compositeRuleSteps.map((s) => s.paramKey).join(", ")}.
             </small>
           </div>
         ) : null}
