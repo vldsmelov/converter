@@ -33,6 +33,13 @@ export default function NsiRulesPage() {
   const itemCatName = (id: number | null | undefined) => (id ? (itemCatById.get(id)?.name ?? String(id)) : "-");
 
   const itemById = useMemo(() => new Map<number, any>(items.map((i: any) => [i.id, i])), [items]);
+  const itemRules = useMemo(() => rules.filter((r: any) => !!r.item), [rules]);
+
+  function formatRuleParams(rule: any): string {
+    const params = rule?.params ?? {};
+    const pairs = Object.entries(params).map(([k, v]) => `${k}=${v}`);
+    return pairs.length > 0 ? pairs.join(", ") : "-";
+  }
 
   async function load() {
     if (!token) return;
@@ -58,9 +65,10 @@ export default function NsiRulesPage() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
-
-  const weightRules = useMemo(() => rules.filter((r: any) => r.rule_type === "pcs_weight"), [rules]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line
+  }, [token]);
 
   async function removeGlobalRule(id: number) {
     if (!token) return;
@@ -127,15 +135,9 @@ export default function NsiRulesPage() {
       </p>
 
       <div className="row" style={{ marginTop: 12 }}>
-        <button className={activeTab === "global" ? "btn primary" : "btn"} onClick={() => setActiveTab("global")}>
-          Глобальные
-        </button>
-        <button className={activeTab === "category" ? "btn primary" : "btn"} onClick={() => setActiveTab("category")}>
-          Правила категорий
-        </button>
-        <button className={activeTab === "item" ? "btn primary" : "btn"} onClick={() => setActiveTab("item")}>
-          Правила номенклатуры
-        </button>
+        <button className={activeTab === "global" ? "btn primary" : "btn"} onClick={() => setActiveTab("global")}>Глобальные</button>
+        <button className={activeTab === "category" ? "btn primary" : "btn"} onClick={() => setActiveTab("category")}>Правила категорий</button>
+        <button className={activeTab === "item" ? "btn primary" : "btn"} onClick={() => setActiveTab("item")}>Правила номенклатуры</button>
       </div>
 
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
@@ -199,17 +201,18 @@ export default function NsiRulesPage() {
 
       {activeTab === "item" && (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ marginTop: 0 }}>Правила для номенклатуры (вес штуки)</h4>
+          <h4 style={{ marginTop: 0 }}>Правила для номенклатуры</h4>
           <table>
             <thead>
-              <tr><th>ID</th><th>Номенклатура</th><th>kg_per_pc</th><th>Статус</th><th></th></tr>
+              <tr><th>ID</th><th>Номенклатура</th><th>Тип</th><th>Параметры</th><th>Статус</th><th></th></tr>
             </thead>
             <tbody>
-              {weightRules.map((r: any) => (
+              {itemRules.map((r: any) => (
                 <tr key={r.id}>
                   <td>{r.id}</td>
                   <td>{itemById.get(r.item)?.name ?? r.item}</td>
-                  <td>{r.params?.kg_per_pc}</td>
+                  <td>{r.rule_type}</td>
+                  <td>{formatRuleParams(r)}</td>
                   <td>{r.status}</td>
                   <td style={{ textAlign: "right" }}>
                     <div className="row" style={{ justifyContent: "flex-end" }}>
@@ -219,7 +222,7 @@ export default function NsiRulesPage() {
                   </td>
                 </tr>
               ))}
-              {weightRules.length === 0 && <tr><td colSpan={5}><small>Пока нет правил по номенклатуре.</small></td></tr>}
+              {itemRules.length === 0 && <tr><td colSpan={6}><small>Пока нет правил по номенклатуре.</small></td></tr>}
             </tbody>
           </table>
         </div>

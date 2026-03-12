@@ -7,9 +7,28 @@ import { downloadWithAuth } from "../lib/download";
 
 type Invoice = any;
 
+function fmtDate(s: string | null | undefined) {
+  if (!s) return "-";
+  return s.slice(0, 10);
+}
+
 function fmtDateTime(s: string | null | undefined) {
-  if (!s) return "—";
+  if (!s) return "-";
   return s.replace("T", " ").slice(0, 19);
+}
+
+function fmtQty(v: unknown, digits = 3) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v ?? "-");
+  return n.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: digits });
+}
+
+function fmtSize(v: unknown) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) return "-";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export default function InvoiceDetailPage() {
@@ -24,6 +43,24 @@ export default function InvoiceDetailPage() {
   const [busy, setBusy] = useState<"" | "calculate" | "generate">("");
 
   const itemById = useMemo(() => new Map<number, any>(items.map((i: any) => [i.id, i])), [items]);
+  const lines = inv?.lines ?? [];
+  const files = inv?.files ?? [];
+
+  const summary = useMemo(() => {
+    const data = lines.reduce(
+      (acc: any, l: any) => {
+        acc.count += 1;
+        acc.docQty += Number(l.qty ?? 0) || 0;
+        if (l.converted) {
+          acc.converted += 1;
+          acc.postingQty += Number(l.converted.posting_qty ?? 0) || 0;
+        }
+        return acc;
+      },
+      { count: 0, converted: 0, docQty: 0, postingQty: 0 }
+    );
+    return data;
+  }, [lines]);
 
   async function load() {
     if (!token) return;
@@ -109,21 +146,54 @@ export default function InvoiceDetailPage() {
     return s === "calculated";
   }, [inv?.status]);
 
+  const status = String(inv?.status ?? "");
+
   return (
     <div className="card">
       <PageHeader
         title={`Накладная: ${inv?.number ?? `#${invId}`}`}
-        subtitle={`Статус: ${inv?.status ?? "—"} • Создана: ${fmtDateTime(inv?.created_at)}`}
+        subtitle={`Статус: ${status || "-"} • Создана: ${fmtDateTime(inv?.created_at)}`}
         right={
           <>
-            <button className="btn" onClick={() => nav("/")}>← К списку</button>
+            <button className="btn" onClick={() => nav("/")}>К списку</button>
             <button className="btn" onClick={load}>Обновить</button>
           </>
         }
       />
 
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
-      {!inv ? <div style={{ padding: 8 }}>Загрузка…</div> : null}
+      {!inv ? <div style={{ padding: 8 }}>Загрузка...</div> : null}
+
+      {inv ? (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="invoice-meta-grid">
+            <div className="invoice-meta-item">
+              <small>Поставщик</small>
+              <b>{String(inv.supplier ?? "-")}</b>
+            </div>
+            <div className="invoice-meta-item">
+              <small>Дата документа</small>
+              <b>{fmtDate(inv.doc_date)}</b>
+            </div>
+            <div className="invoice-meta-item">
+              <small>Строк в документе</small>
+              <b>{summary.count}</b>
+            </div>
+            <div className="invoice-meta-item">
+              <small>Рассчитано строк</small>
+              <b>{summary.converted}</b>
+            </div>
+            <div className="invoice-meta-item">
+              <small>Сумма в документе</small>
+              <b>{fmtQty(summary.docQty, 3)}</b>
+            </div>
+            <div className="invoice-meta-item">
+              <small>Сумма оприходования</small>
+              <b>{fmtQty(summary.postingQty, 6)}</b>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {inv?.error ? (
         <div className="card" style={{ marginTop: 12 }}>
@@ -136,72 +206,86 @@ export default function InvoiceDetailPage() {
         <h4 style={{ marginTop: 0 }}>Действия</h4>
         <div className="row">
           <button className="btn primary" onClick={calculate} disabled={!canCalculate || busy !== ""}>
-            {busy === "calculate" ? "Считаю…" : "Рассчитать"}
+            {busy === "calculate" ? "Считаю..." : "Рассчитать"}
           </button>
           <button className="btn primary" onClick={generate} disabled={!canGenerate || busy !== ""}>
-            {busy === "generate" ? "Генерирую…" : "Сгенерировать XLSX/PDF"}
+            {busy === "generate" ? "Генерирую..." : "Сгенерировать XLSX/PDF"}
           </button>
           <div style={{ flex: 1 }} />
-          <span className="badge">new → calculating → calculated → generating → generated</span>
+          <span className="badge">new -> calculating -> calculated -> generating -> generated</span>
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Строки</h4>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Товар</th>
-              <th>Кол-во</th>
-              <th>ЕИ (в документе)</th>
-              <th>Оприходование</th>
-              <th>Статус строки</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(inv?.lines ?? []).map((l: any) => {
-              const it = itemById.get(l.item_id);
-              const name = it?.name ?? `item_id=${l.item_id}`;
-              const conv = l.converted;
-              const ok = !!conv;
-              return (
-                <tr key={l.line_no}>
-                  <td>{l.line_no}</td>
-                  <td>{name}</td>
-                  <td>{l.qty}</td>
-                  <td>{l.uom_code}</td>
-                  <td>{ok ? <span className="badge">{conv.posting_qty} {conv.posting_uom_code}</span> : "—"}</td>
-                  <td>{ok ? "ok" : (inv?.status === "failed" ? "failed" : "—")}</td>
-                </tr>
-              );
-            })}
-            {(inv?.lines ?? []).length === 0 && <tr><td colSpan={6}><small>Строк нет.</small></td></tr>}
-          </tbody>
-        </table>
+        <h4 style={{ marginTop: 0 }}>Таблица строк</h4>
+        <div style={{ overflowX: "auto" }}>
+          <table className="compact-table invoice-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Номенклатура</th>
+                <th className="num">Кол-во</th>
+                <th>ЕИ</th>
+                <th className="num">Оприход.</th>
+                <th>ЕИ опр.</th>
+                <th>Статус</th>
+                <th>Примечание</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l: any) => {
+                const it = itemById.get(l.item_id);
+                const name = it?.name ?? `item_id=${l.item_id}`;
+                const conv = l.converted;
+                const rowStatus = conv ? "ok" : (status === "failed" ? "failed" : "-");
+                const note = conv
+                  ? `Шагов: ${Array.isArray(conv.steps) ? conv.steps.length : 0}`
+                  : (status === "failed" ? "Проверьте правила конвертации" : "");
+
+                return (
+                  <tr key={l.line_no}>
+                    <td>{l.line_no}</td>
+                    <td className="name-cell">{name}</td>
+                    <td className="num">{fmtQty(l.qty, 3)}</td>
+                    <td>{l.uom_code}</td>
+                    <td className="num">{conv ? fmtQty(conv.posting_qty, 6) : "-"}</td>
+                    <td>{conv?.posting_uom_code ?? "-"}</td>
+                    <td><span className="badge">{rowStatus}</span></td>
+                    <td className="note-cell"><small>{note}</small></td>
+                  </tr>
+                );
+              })}
+              {lines.length === 0 && <tr><td colSpan={8}><small>Строк нет.</small></td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
         <h4 style={{ marginTop: 0 }}>Файлы</h4>
-        {(inv?.files ?? []).length === 0 ? (
+        {files.length === 0 ? (
           <small>Файлов пока нет. Нажми «Сгенерировать XLSX/PDF» после расчёта.</small>
         ) : (
-          <table>
-            <thead>
-              <tr><th>Тип</th><th>Ссылка</th><th></th></tr>
-            </thead>
-            <tbody>
-              {(inv.files ?? []).map((f: any, idx: number) => (
-                <tr key={idx}>
-                  <td><span className="badge">{f.file_type}</span></td>
-                  <td><small>{String(f.download_url ?? "")}</small></td>
-                  <td style={{ textAlign: "right" }}>
-                    <button className="btn" onClick={() => downloadFile(f)}>Скачать</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={{ overflowX: "auto" }}>
+            <table className="compact-table">
+              <thead>
+                <tr><th>Тип</th><th>Файл</th><th className="num">Размер</th><th>Создан</th><th></th></tr>
+              </thead>
+              <tbody>
+                {files.map((f: any, idx: number) => (
+                  <tr key={idx}>
+                    <td><span className="badge">{f.file_type}</span></td>
+                    <td><small>{String(f.file_name ?? f.download_url ?? "-")}</small></td>
+                    <td className="num">{fmtSize(f.size)}</td>
+                    <td><small>{fmtDateTime(f.created_at)}</small></td>
+                    <td style={{ textAlign: "right" }}>
+                      <button className="btn" onClick={() => downloadFile(f)}>Скачать</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

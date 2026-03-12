@@ -39,3 +39,127 @@ input, select {
   border-radius: 10px;
 }
 small { color: #9ca3af; }
+
+.compact-table th,
+.compact-table td {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.compact-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.invoice-table .name-cell {
+  min-width: 240px;
+  white-space: normal;
+}
+
+.invoice-table .note-cell {
+  min-width: 220px;
+  white-space: normal;
+}
+
+.invoice-meta-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+}
+
+.invoice-meta-item {
+  background: #0b1220;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.invoice-meta-item small {
+  display: block;
+  margin-bottom: 4px;
+}
+
+@media (max-width: 1000px) {
+  .invoice-meta-grid {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+}
+
+.invoice-filters input,
+.invoice-filters select {
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.invoice-list-table th,
+.invoice-list-table td {
+  padding: 5px 7px;
+  font-size: 13px;
+}
+
+.invoice-list-table .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.invoice-list-table .num {
+  text-align: right;
+}
+
+.invoice-list-table th {
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #0f172a;
+  border-bottom: 1px solid #334155;
+}
+
+.btn.btn-tight {
+  padding: 5px 9px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.invoice-list-wrap {
+  max-height: 68vh;
+  overflow: auto;
+  border: 1px solid #1f2937;
+  border-radius: 10px;
+}
+
+.invoice-list-wrap table {
+  margin: 0;
+}
+
+.invoice-preset-row {
+  gap: 6px;
+}
+
+.invoice-list-table .action-col {
+  position: sticky;
+  right: 0;
+  background: #111827;
+  z-index: 1;
+  border-left: 1px solid #334155;
+}
+
+.invoice-list-table thead .action-col {
+  top: 0;
+  z-index: 4;
+  background: #0f172a;
+}
+
+.invoice-list-table .id-col {
+  position: sticky;
+  left: 0;
+  background: #111827;
+  z-index: 1;
+  border-right: 1px solid #334155;
+}
+
+.invoice-list-table thead .id-col {
+  top: 0;
+  z-index: 5;
+  background: #0f172a;
+}

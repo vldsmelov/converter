@@ -6,6 +6,7 @@ import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
 
 type Scope = "global" | "category" | "item";
+type ItemRuleType = "density" | "kg_per_m" | "pcs_weight";
 
 type Uom = any;
 type UomCat = any;
@@ -45,18 +46,74 @@ function resolveScope(s: unknown): Scope {
   return "global";
 }
 
+function parseItemRuleType(s: unknown): ItemRuleType | null {
+  if (s === "density" || s === "kg_per_m" || s === "pcs_weight") return s;
+  return null;
+}
+
 function pickUomForCategory(uoms: any[], uomCatsById: Map<number, any>, categoryId: number | null | undefined): number | null {
   if (!categoryId) return null;
   const inCategory = uoms.filter((u: any) => u.category === categoryId);
   if (!inCategory.length) return null;
 
   const catCode = up(uomCatsById.get(categoryId)?.code);
-  const preferredCode = catCode === "COUNT" ? "PCS" : (catCode === "MASS" ? "KG" : "");
+  const preferredCode =
+    catCode === "COUNT"
+      ? "PCS"
+      : catCode === "MASS"
+        ? "KG"
+        : catCode === "LENGTH"
+          ? "M"
+          : catCode === "VOLUME"
+            ? "L"
+            : "";
+
   if (preferredCode) {
     const preferred = inCategory.find((u: any) => up(u.code) === preferredCode);
     if (preferred) return preferred.id;
   }
+
   return inCategory[0].id;
+}
+
+function ruleTypeFitsPair(ruleType: ItemRuleType, fromCatCode: string, toCatCode: string): boolean {
+  const pair = new Set([fromCatCode, toCatCode]);
+  if (ruleType === "pcs_weight") return pair.has("COUNT") && pair.has("MASS");
+  if (ruleType === "kg_per_m") return pair.has("LENGTH") && pair.has("MASS");
+  return pair.has("MASS") && pair.has("VOLUME");
+}
+
+function inferRuleTypeByPair(fromCatCode: string, toCatCode: string): ItemRuleType | null {
+  if (ruleTypeFitsPair("pcs_weight", fromCatCode, toCatCode)) return "pcs_weight";
+  if (ruleTypeFitsPair("kg_per_m", fromCatCode, toCatCode)) return "kg_per_m";
+  if (ruleTypeFitsPair("density", fromCatCode, toCatCode)) return "density";
+  return null;
+}
+
+function ruleParamKey(ruleType: ItemRuleType): string {
+  if (ruleType === "density") return "density_kg_per_l";
+  if (ruleType === "kg_per_m") return "kg_per_m";
+  return "kg_per_pc";
+}
+
+function ruleHint(ruleType: ItemRuleType): string {
+  if (ruleType === "density") return "Ограничение: MASS <-> VOLUME.";
+  if (ruleType === "kg_per_m") return "Ограничение: LENGTH <-> MASS.";
+  return "Ограничение: COUNT <-> MASS (для COUNT используйте PCS).";
+}
+
+function defaultItemPreset(ruleType: ItemRuleType, uoms: any[]): { fromId: number | null; toId: number | null; coef: string } {
+  const byCode = (code: string) => uoms.find((x: any) => up(x.code) === code)?.id ?? null;
+
+  if (ruleType === "kg_per_m") {
+    return { fromId: byCode("M"), toId: byCode("KG"), coef: "1" };
+  }
+
+  if (ruleType === "density") {
+    return { fromId: byCode("L"), toId: byCode("KG"), coef: "1" };
+  }
+
+  return { fromId: byCode("KG"), toId: byCode("PCS"), coef: "0.023" };
 }
 
 export default function NsiRulesWizardPage() {
@@ -69,6 +126,7 @@ export default function NsiRulesWizardPage() {
   const scopeFromQuery = resolveScope(qs.get("scope"));
   const preFrom = qs.get("from");
   const preTo = qs.get("to");
+  const preRuleType = parseItemRuleType(qs.get("rule_type"));
   const preCatId = qs.get("category_id");
   const preItemId = qs.get("item_id");
 
@@ -92,6 +150,7 @@ export default function NsiRulesWizardPage() {
   const [status, setStatus] = useState<"active" | "draft" | "archived">("active");
   const [categoryId, setCategoryId] = useState<number | null>(preCatId ? Number(preCatId) : null);
   const [itemId, setItemId] = useState<number | null>(preItemId ? Number(preItemId) : null);
+  const [itemRuleType, setItemRuleType] = useState<ItemRuleType>(preRuleType ?? "pcs_weight");
 
   const [categoryRuleMeta, setCategoryRuleMeta] = useState<CategoryRuleMeta>({
     supplier_code: "",
@@ -120,6 +179,15 @@ export default function NsiRulesWizardPage() {
   const fromCatCode = fromUom ? (uomCatsById.get(fromUom.category)?.code ?? "-") : "-";
   const toCatCode = toUom ? (uomCatsById.get(toUom.category)?.code ?? "-") : "-";
 
+  useEffect(() => {
+    if (scope !== "item") return;
+    const inferred = inferRuleTypeByPair(fromCatCode, toCatCode);
+    if (!inferred) return;
+    if (!isEditMode && !preRuleType) {
+      setItemRuleType(inferred);
+    }
+  }, [scope, fromCatCode, toCatCode, isEditMode, preRuleType]);
+
   const exampleText = useMemo(() => {
     if (scope === "global") return "Пример товара: любой товар";
     if (scope === "category") return `Пример товара: любой товар из категории "${itemCatById.get(categoryId ?? -1)?.name ?? "-"}"`;
@@ -130,22 +198,33 @@ export default function NsiRulesWizardPage() {
   const exampleOutQty = useMemo(() => {
     const inQ = n(exampleInQty);
     const k = n(coef);
+    if (k <= 0) return "-";
 
     if (scope === "item") {
-      if (k <= 0) return "-";
-      if (fromCatCode === "COUNT" && toCatCode === "MASS") return fmt(inQ * k, 6);
-      if (fromCatCode === "MASS" && toCatCode === "COUNT") return fmt(inQ / k, 6);
+      if (itemRuleType === "pcs_weight") {
+        if (fromCatCode === "COUNT" && toCatCode === "MASS") return fmt(inQ * k, 6);
+        if (fromCatCode === "MASS" && toCatCode === "COUNT") return fmt(inQ / k, 6);
+        return "-";
+      }
+
+      if (itemRuleType === "kg_per_m") {
+        if (fromCatCode === "LENGTH" && toCatCode === "MASS") return fmt(inQ * k, 6);
+        if (fromCatCode === "MASS" && toCatCode === "LENGTH") return fmt(inQ / k, 6);
+        return "-";
+      }
+
+      if (fromCatCode === "VOLUME" && toCatCode === "MASS") return fmt(inQ * k, 6);
+      if (fromCatCode === "MASS" && toCatCode === "VOLUME") return fmt(inQ / k, 6);
       return "-";
     }
 
-    if (k <= 0) return "-";
     return fmt(inQ * k, 6);
-  }, [exampleInQty, coef, scope, fromCatCode, toCatCode]);
+  }, [exampleInQty, coef, scope, fromCatCode, toCatCode, itemRuleType]);
 
   const validations = useMemo(() => {
     const v: string[] = [];
     if (!fromUom || !toUom) v.push("Выберите входящую и итоговую ЕИ.");
-    if (n(coef) <= 0) v.push(scope === "item" ? "Вес 1 PCS (kg_per_pc) должен быть > 0." : "Коэффициент должен быть > 0.");
+    if (n(coef) <= 0) v.push("Параметр коэффициента должен быть > 0.");
 
     if (scope === "global") {
       if (fromUom && toUom && fromUom.category !== toUom.category) {
@@ -161,16 +240,18 @@ export default function NsiRulesWizardPage() {
 
     if (scope === "item") {
       if (!itemId) v.push("Выберите номенклатурную позицию.");
-      const okPair = new Set([fromCatCode, toCatCode]);
-      if (!(okPair.has("COUNT") && okPair.has("MASS"))) {
-        v.push("Для правила номенклатуры нужен перевод между COUNT и MASS.");
+      if (!ruleTypeFitsPair(itemRuleType, fromCatCode, toCatCode)) {
+        v.push(`Выбранный тип правила не подходит для пары категорий (${fromCatCode} -> ${toCatCode}).`);
       }
-      if (fromCatCode === "COUNT" && up(fromUom?.code) !== "PCS") v.push("COUNT-единица должна быть PCS.");
-      if (toCatCode === "COUNT" && up(toUom?.code) !== "PCS") v.push("COUNT-единица должна быть PCS.");
+
+      if (itemRuleType === "pcs_weight") {
+        if (fromCatCode === "COUNT" && up(fromUom?.code) !== "PCS") v.push("Для COUNT используйте ЕИ PCS.");
+        if (toCatCode === "COUNT" && up(toUom?.code) !== "PCS") v.push("Для COUNT используйте ЕИ PCS.");
+      }
     }
 
     return v;
-  }, [scope, fromUom, toUom, coef, categoryId, itemId, fromCatCode, toCatCode]);
+  }, [scope, fromUom, toUom, coef, categoryId, itemId, fromCatCode, toCatCode, itemRuleType]);
 
   const canSave = validations.length === 0 && (!isEditMode || !!editId);
 
@@ -239,8 +320,13 @@ export default function NsiRulesWizardPage() {
             url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/${editId}/`,
             token,
           });
+
+          const loadedType = parseItemRuleType(r.rule_type) ?? "pcs_weight";
+          const paramKey = ruleParamKey(loadedType);
+
           setItemId(r.item ?? null);
-          setCoef(String(r.params?.kg_per_pc ?? "1"));
+          setItemRuleType(loadedType);
+          setCoef(String(r.params?.[paramKey] ?? "1"));
           setStatus((r.status ?? "active") as any);
           setItemRuleMeta({
             conditions: (r.conditions && typeof r.conditions === "object" && !Array.isArray(r.conditions)) ? r.conditions : {},
@@ -262,6 +348,7 @@ export default function NsiRulesWizardPage() {
         const fu = nextUoms.find((x: any) => up(x.code) === up(preFrom));
         if (fu) setFromUomId(fu.id);
       }
+
       if (preTo && toUomId === null) {
         const tu = nextUoms.find((x: any) => up(x.code) === up(preTo));
         if (tu) setToUomId(tu.id);
@@ -271,12 +358,26 @@ export default function NsiRulesWizardPage() {
       const m = nextUoms.find((x: any) => x.code === "M");
       const bag = nextUoms.find((x: any) => x.code === "BAG");
       const kg = nextUoms.find((x: any) => x.code === "KG");
-      const pcs = nextUoms.find((x: any) => x.code === "PCS");
 
       if (!fromUomId || !toUomId) {
-        if (scope === "global" && cm && m) { setFromUomId(cm.id); setToUomId(m.id); setCoef("0.01"); }
-        if (scope === "category" && bag && kg) { setFromUomId(bag.id); setToUomId(kg.id); setCoef("50"); }
-        if (scope === "item" && kg && pcs) { setFromUomId(kg.id); setToUomId(pcs.id); setCoef("0.023"); }
+        if (scope === "global" && cm && m) {
+          setFromUomId(cm.id);
+          setToUomId(m.id);
+          setCoef("0.01");
+        }
+
+        if (scope === "category" && bag && kg) {
+          setFromUomId(bag.id);
+          setToUomId(kg.id);
+          setCoef("50");
+        }
+
+        if (scope === "item") {
+          const preset = defaultItemPreset(preRuleType ?? itemRuleType, nextUoms);
+          if (preset.fromId) setFromUomId(preset.fromId);
+          if (preset.toId) setToUomId(preset.toId);
+          setCoef(preset.coef);
+        }
       }
 
       if (!categoryId && nextItemCats.length) setCategoryId(nextItemCats[0].id);
@@ -286,13 +387,18 @@ export default function NsiRulesWizardPage() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token, isEditMode, editId, editScope, location.search]);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line
+  }, [token, isEditMode, editId, editScope, location.search]);
 
   const coefLabel = useMemo(() => {
     if (scope === "global") return "Коэффициент (multiplier)";
     if (scope === "category") return "Коэффициент (сколько итоговой ЕИ в 1 входящей)";
-    return "Вес 1 PCS (kg_per_pc, в KG)";
-  }, [scope]);
+    if (itemRuleType === "density") return "Плотность (density_kg_per_l, кг/л)";
+    if (itemRuleType === "kg_per_m") return "Линейная масса (kg_per_m, кг/м)";
+    return "Вес 1 PCS (kg_per_pc, кг)";
+  }, [scope, itemRuleType]);
 
   async function saveRule() {
     if (!token) return;
@@ -334,7 +440,11 @@ export default function NsiRulesWizardPage() {
             effective_to: categoryRuleMeta.effective_to ?? null,
           },
         });
-      } else if (scope === "item") {
+      } else {
+        const params: Record<string, string> = {
+          [ruleParamKey(itemRuleType)]: String(n(coef)),
+        };
+
         await requestJson({
           method: isEditMode ? "PUT" : "POST",
           url: isEditMode
@@ -345,9 +455,9 @@ export default function NsiRulesWizardPage() {
             item: itemId,
             from_category: fromUom?.category,
             to_category: toUom?.category,
-            rule_type: "pcs_weight",
+            rule_type: itemRuleType,
             conditions: itemRuleMeta.conditions ?? {},
-            params: { kg_per_pc: String(n(coef)) },
+            params,
             priority: itemRuleMeta.priority ?? 0,
             status,
             effective_from: itemRuleMeta.effective_from ?? null,
@@ -366,7 +476,7 @@ export default function NsiRulesWizardPage() {
   const pageTitle = isEditMode ? "Редактирование правила" : "Создание правила";
   const pageSubtitle = isEditMode
     ? "Измените параметры и сохраните правило."
-    : "Для болтов (оприходование PCS) можно создать правило KG -> PCS, задав вес 1 PCS.";
+    : "Создайте правило перевода между ЕИ. Для межкатегорийного перевода выбирайте тип правила в блоке параметров.";
   const submitLabel = isEditMode ? "Сохранить" : "Создать правило";
 
   return (
@@ -401,15 +511,27 @@ export default function NsiRulesWizardPage() {
           )}
 
           {scope === "item" && (
-            <label style={{ flex: 1 }}>
-              <small>Номенклатура</small><br />
-              <select value={itemId ?? ""} onChange={(e) => setItemId(toNum(e.target.value))} style={{ width: "100%" }}>
-                {items.map((it: any) => <option key={it.id} value={it.id}>{it.name}</option>)}
-              </select>
-            </label>
+            <>
+              <label style={{ flex: 1 }}>
+                <small>Номенклатура</small><br />
+                <select value={itemId ?? ""} onChange={(e) => setItemId(toNum(e.target.value))} style={{ width: "100%" }}>
+                  {items.map((it: any) => <option key={it.id} value={it.id}>{it.name}</option>)}
+                </select>
+              </label>
+
+              <label>
+                <small>Тип конвертации</small><br />
+                <select value={itemRuleType} onChange={(e) => setItemRuleType(e.target.value as ItemRuleType)}>
+                  <option value="pcs_weight">COUNT <-> MASS (pcs_weight)</option>
+                  <option value="kg_per_m">LENGTH <-> MASS (kg_per_m)</option>
+                  <option value="density">MASS <-> VOLUME (density)</option>
+                </select>
+              </label>
+            </>
           )}
         </div>
-        {isEditMode && <div style={{ marginTop: 8 }}><small>Тип правила фиксирован в режиме редактирования.</small></div>}
+
+        {isEditMode && <div style={{ marginTop: 8 }}><small>Тип области фиксирован в режиме редактирования.</small></div>}
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
@@ -448,7 +570,7 @@ export default function NsiRulesWizardPage() {
         <div style={{ marginTop: 10 }}>
           {scope === "global" && <small>Ограничение: обе ЕИ должны быть в <b>одной категории</b>. Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
           {scope === "category" && <small>Ограничение: COUNT {"->"} MASS (пример: BAG {"->"} KG). Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
-          {scope === "item" && <small>Ограничение: MASS {"<->"} COUNT (PCS). Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
+          {scope === "item" && <small>{ruleHint(itemRuleType)} Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
         </div>
       </div>
 
@@ -485,8 +607,7 @@ export default function NsiRulesWizardPage() {
         {scope === "item" ? (
           <div style={{ marginTop: 8 }}>
             <small>
-              Для болтов удобно задавать вес 1 PCS: например 0.023 (KG). Тогда:
-              KG {"->"} PCS: pcs = kg / 0.023; PCS {"->"} KG: kg = pcs * 0.023.
+              Параметр для типа правила: <b>{ruleParamKey(itemRuleType)}</b>. Пример рассчитывается из выбранных ЕИ и коэффициента.
             </small>
           </div>
         ) : null}

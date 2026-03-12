@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { requestJson } from "../api/request";
+import { ApiError, requestJson } from "../api/request";
 import PageHeader from "../components/PageHeader";
 
 type Item = any;
 type Uom = any;
 type Cat = any;
+type UomCat = any;
 
 type Line = {
   key: string;
@@ -21,9 +22,24 @@ type Check = {
   suggestedUrl?: string;
 };
 
+type SuggestedRuleStep = {
+  step?: number;
+  from_category?: string;
+  to_category?: string;
+  rule_type?: string;
+  required_param?: string;
+  example_param_value?: string;
+};
+
+type ParsedConvertError = {
+  message?: string;
+  suggestedSteps: SuggestedRuleStep[];
+};
+
 function randNo() {
   return `НК-${Math.random().toString(16).slice(2, 8).toUpperCase()}`;
 }
+
 function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
@@ -32,12 +48,38 @@ function up(s: any) {
   return String(s ?? "").toUpperCase();
 }
 
+function inferRuleTypeByCategories(fromCategory: string | null, toCategory: string | null): string | null {
+  if (!fromCategory || !toCategory) return null;
+  const pair = new Set([fromCategory, toCategory]);
+  if (pair.has("COUNT") && pair.has("MASS")) return "pcs_weight";
+  if (pair.has("LENGTH") && pair.has("MASS")) return "kg_per_m";
+  if (pair.has("MASS") && pair.has("VOLUME")) return "density";
+  return null;
+}
+
+function parseConvertError(error: unknown): ParsedConvertError | null {
+  if (!(error instanceof ApiError)) return null;
+
+  try {
+    const parsed = JSON.parse(error.bodyText);
+    const detail = parsed?.detail;
+    if (!detail || typeof detail !== "object") return null;
+
+    const message = typeof detail.message === "string" ? detail.message : undefined;
+    const suggestedSteps = Array.isArray(detail.suggested_steps) ? detail.suggested_steps : [];
+    return { message, suggestedSteps };
+  } catch {
+    return null;
+  }
+}
+
 export default function CreateInvoicePage() {
   const { token } = useAuth();
   const nav = useNavigate();
 
   const [items, setItems] = useState<Item[]>([]);
   const [uoms, setUoms] = useState<Uom[]>([]);
+  const [uomCats, setUomCats] = useState<UomCat[]>([]);
   const [cats, setCats] = useState<Cat[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
@@ -47,14 +89,47 @@ export default function CreateInvoicePage() {
 
   const [lines, setLines] = useState<Line[]>([]);
   const [creating, setCreating] = useState(false);
-
   const [checks, setChecks] = useState<Record<string, Check>>({});
 
   const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
-  const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "—");
+  const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "-");
 
   const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
-  const uomCodeById = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "—");
+  const uomByCode = useMemo(() => new Map<string, any>(uoms.map((u: any) => [up(u.code), u])), [uoms]);
+  const uomCatCodeById = useMemo(() => new Map<number, string>(uomCats.map((c: any) => [c.id, up(c.code)])), [uomCats]);
+  const uomCodeById = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-");
+
+  function uomCategoryCodeByUomCode(code: string | null | undefined): string | null {
+    if (!code) return null;
+    const u = uomByCode.get(up(code));
+    if (!u) return null;
+    return uomCatCodeById.get(u.category) ?? null;
+  }
+
+  function pickUomCodeForCategory(categoryCode: string | null | undefined): string | null {
+    if (!categoryCode) return null;
+    const cc = up(categoryCode);
+    const inCategory = uoms.filter((u: any) => up(uomCatCodeById.get(u.category)) === cc);
+    if (!inCategory.length) return null;
+
+    const preferredCode =
+      cc === "COUNT"
+        ? "PCS"
+        : cc === "MASS"
+          ? "KG"
+          : cc === "LENGTH"
+            ? "M"
+            : cc === "VOLUME"
+              ? "L"
+              : "";
+
+    if (preferredCode) {
+      const preferred = inCategory.find((u: any) => up(u.code) === preferredCode);
+      if (preferred) return up(preferred.code);
+    }
+
+    return up(inCategory[0].code);
+  }
 
   function itemPostingUomCode(it: any): string | null {
     const id = it?.policy?.posting_uom;
@@ -65,14 +140,18 @@ export default function CreateInvoicePage() {
   async function loadRefs() {
     if (!token) return;
     setErr(null);
+
     try {
-      const [it, u, c] = await Promise.all([
+      const [it, u, uc, c] = await Promise.all([
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
       ]);
+
       setItems(it ?? []);
       setUoms(u ?? []);
+      setUomCats(uc ?? []);
       setCats(c ?? []);
 
       if (lines.length === 0) {
@@ -84,7 +163,10 @@ export default function CreateInvoicePage() {
     }
   }
 
-  useEffect(() => { loadRefs(); /* eslint-disable-next-line */ }, [token]);
+  useEffect(() => {
+    loadRefs();
+    // eslint-disable-next-line
+  }, [token]);
 
   const uomOptions = useMemo(() => (uoms ?? []).map((u: any) => u.code), [uoms]);
 
@@ -107,33 +189,42 @@ export default function CreateInvoicePage() {
     setLines((prev) =>
       prev.map((l, i) => {
         if (i !== idx) return l;
-        const nextUom = (l.uom_code === "KG" && posting) ? posting : l.uom_code;
+        const nextUom = l.uom_code === "KG" && posting ? posting : l.uom_code;
         return { ...l, item_id: itemId, uom_code: nextUom };
       })
     );
   }
 
-  function suggestRuleUrl(args: { item: any; fromCode: string }): string {
-    const posting = itemPostingUomCode(args.item) ?? "KG";
+  function suggestRuleUrl(args: {
+    item: any;
+    fromCode: string;
+    toCode?: string | null;
+    ruleType?: string | null;
+    fromCategory?: string | null;
+    toCategory?: string | null;
+  }): string {
     const from = up(args.fromCode);
-    const to = up(posting);
+    const to = up(args.toCode ?? itemPostingUomCode(args.item) ?? "KG");
 
-    // Heuristic:
-    // - if storage unit is PCS -> item-level weight rule is the most probable (KG->PCS)
-    // - BAG/BOX typically means "упаковка" at category level
-    // - PCS as input also points to item weight (PCS->KG)
-    // - otherwise -> global
+    const fromCategory = up(args.fromCategory ?? uomCategoryCodeByUomCode(from) ?? "");
+    const toCategory = up(args.toCategory ?? uomCategoryCodeByUomCode(to) ?? "");
+
     let scope = "global";
-    if (to === "PCS") scope = "item";
-    if (from === "PCS") scope = "item";
+    if (fromCategory && toCategory && fromCategory !== toCategory) scope = "item";
     if (from === "BAG" || from === "BOX") scope = "category";
+    if (from === "PCS" || to === "PCS") scope = "item";
+    if (args.ruleType) scope = "item";
+
+    const inferredRuleType = args.ruleType ?? inferRuleTypeByCategories(fromCategory || null, toCategory || null);
 
     const qs = new URLSearchParams();
     qs.set("scope", scope);
     qs.set("from", from);
     qs.set("to", to);
+    if (scope === "item" && inferredRuleType) qs.set("rule_type", inferredRuleType);
     if (args.item?.category) qs.set("category_id", String(args.item.category));
     if (args.item?.id) qs.set("item_id", String(args.item.id));
+
     return `/nsi/rules/new?${qs.toString()}`;
   }
 
@@ -144,7 +235,6 @@ export default function CreateInvoicePage() {
     const it = items.find((x: any) => x.id === line.item_id);
     const posting = itemPostingUomCode(it);
 
-    // Short-circuit: if incoming UoM already equals posting UoM => rule not needed
     if (posting && up(posting) === up(line.uom_code)) {
       setChecks((m) => ({
         ...m,
@@ -167,32 +257,76 @@ export default function CreateInvoicePage() {
           item_id: line.item_id,
           qty: "1",
           from_uom: line.uom_code,
-          uom_code: line.uom_code, // backward compat
+          uom_code: line.uom_code,
           context: {},
         },
       });
 
       const resultUom = up(res?.to?.uom ?? res?.posting_uom_code);
       const resultQty = String(res?.to?.qty ?? res?.posting_qty ?? "");
-      const ok = posting ? (resultUom === up(posting)) : true;
+      const ok = posting ? resultUom === up(posting) : true;
 
       setChecks((m) => ({
         ...m,
         [line.key]: {
           state: ok ? "ok" : "mismatch",
           message: ok
-            ? `OK: 1 ${up(line.uom_code)} → ${resultQty} ${resultUom}`
-            : `Есть конвертация, но итоговая ЕИ (${resultUom}) ≠ оприходованию (${up(posting)}).`,
-          suggestedUrl: ok ? undefined : (it ? suggestRuleUrl({ item: it, fromCode: line.uom_code }) : undefined),
+            ? `OK: 1 ${up(line.uom_code)} -> ${resultQty} ${resultUom}`
+            : `Есть конвертация, но итоговая ЕИ (${resultUom}) не совпадает с оприходованием (${up(posting)}).`,
+          suggestedUrl: ok
+            ? undefined
+            : (it
+              ? suggestRuleUrl({ item: it, fromCode: line.uom_code, toCode: posting })
+              : undefined),
         },
       }));
-    } catch {
+    } catch (e: any) {
+      const parsed = parseConvertError(e);
+
+      let message = "Нет подходящего правила для перевода. Нужно создать правило.";
+      let suggestedUrl = it ? suggestRuleUrl({ item: it, fromCode: line.uom_code, toCode: posting }) : undefined;
+
+      if (parsed) {
+        const steps = parsed.suggestedSteps;
+
+        if (steps.length > 0) {
+          const first = steps[0];
+          const fromCodeForStep = pickUomCodeForCategory(first.from_category) ?? up(line.uom_code);
+          const toCodeForStep = pickUomCodeForCategory(first.to_category) ?? up(posting ?? "KG");
+
+          if (it) {
+            suggestedUrl = suggestRuleUrl({
+              item: it,
+              fromCode: fromCodeForStep,
+              toCode: toCodeForStep,
+              ruleType: first.rule_type ?? null,
+              fromCategory: first.from_category ?? null,
+              toCategory: first.to_category ?? null,
+            });
+          }
+
+          const stepsText = steps
+            .map((s: SuggestedRuleStep) => {
+              const num = s.step ?? "?";
+              const pair = `${s.from_category ?? "?"} -> ${s.to_category ?? "?"}`;
+              const rule = s.rule_type ?? "rule";
+              const param = s.required_param ? `, ${s.required_param}=${s.example_param_value ?? "..."}` : "";
+              return `${num}) ${pair}, ${rule}${param}`;
+            })
+            .join("; ");
+
+          message = `${parsed.message ?? message}. Шаги: ${stepsText}`;
+        } else if (parsed.message) {
+          message = parsed.message;
+        }
+      }
+
       setChecks((m) => ({
         ...m,
         [line.key]: {
           state: "missing",
-          message: "Нет подходящего правила для перевода. Нужно создать правило.",
-          suggestedUrl: it ? suggestRuleUrl({ item: it, fromCode: line.uom_code }) : undefined,
+          message,
+          suggestedUrl,
         },
       }));
     }
@@ -206,6 +340,7 @@ export default function CreateInvoicePage() {
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
+
     (async () => {
       for (const l of lines) {
         if (cancelled) return;
@@ -213,16 +348,19 @@ export default function CreateInvoicePage() {
         await checkLine(l);
       }
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, signature, items, uoms]);
+  }, [token, signature, items, uoms, uomCats]);
 
   const exampleRow = useMemo(() => {
     const l = lines[0];
     const it = items.find((x: any) => x.id === l?.item_id);
-    const name = it?.name ?? "—";
-    const cat = it?.category ? catName(it.category) : "—";
-    const posting = itemPostingUomCode(it) ?? "—";
+    const name = it?.name ?? "-";
+    const cat = it?.category ? catName(it.category) : "-";
+    const posting = itemPostingUomCode(it) ?? "-";
     return { name, cat, posting };
   }, [lines, items, cats]);
 
@@ -236,6 +374,7 @@ export default function CreateInvoicePage() {
       const st = checks[l.key]?.state;
       return st === "missing" || st === "mismatch";
     });
+
     if (bad.length > 0) {
       setErr("Нельзя создать накладную: для одной или нескольких строк нет подходящего правила (или итоговая ЕИ не совпадает с хранением). Создайте правила и попробуйте снова.");
       return;
@@ -283,7 +422,7 @@ export default function CreateInvoicePage() {
     <div className="card">
       <PageHeader
         title="Создание накладной"
-        subtitle="При заполнении строк показываем, есть ли правило для перевода. Если ЕИ уже совпадает с хранением — это OK."
+        subtitle="При заполнении строк показываем, есть ли правило для перевода. Если ЕИ уже совпадает с хранением, это OK."
         right={<button className="btn" onClick={() => nav("/")}>Отмена</button>}
       />
 
@@ -327,7 +466,6 @@ export default function CreateInvoicePage() {
           </thead>
           <tbody>
             {lines.map((l, idx) => {
-              const it = items.find((x: any) => x.id === l.item_id);
               const ch = checks[l.key];
               return (
                 <tr key={l.key}>
@@ -336,7 +474,7 @@ export default function CreateInvoicePage() {
                     <select value={l.item_id ?? ""} onChange={(e) => setLineItem(idx, Number(e.target.value))}>
                       {items.map((it: any) => (
                         <option key={it.id} value={it.id}>
-                          {it.name} — {catName(it.category)} (хранение: {itemPostingUomCode(it) ?? "—"})
+                          {it.name} - {catName(it.category)} (хранение: {itemPostingUomCode(it) ?? "-"})
                         </option>
                       ))}
                     </select>
@@ -351,7 +489,7 @@ export default function CreateInvoicePage() {
                   </td>
                   <td>
                     {!ch || ch.state === "checking" || ch.state === "idle" ? (
-                      <small>Проверяю…</small>
+                      <small>Проверяю...</small>
                     ) : ch.state === "ok" ? (
                       <div>
                         <span className="badge">OK</span>
@@ -380,9 +518,7 @@ export default function CreateInvoicePage() {
                     )}
                   </td>
                   <td style={{ textAlign: "right" }}>
-                    <button className="btn" onClick={() => removeLine(idx)} disabled={lines.length <= 1}>
-                      Удалить
-                    </button>
+                    <button className="btn" onClick={() => removeLine(idx)} disabled={lines.length <= 1}>Удалить</button>
                   </td>
                 </tr>
               );
@@ -395,13 +531,13 @@ export default function CreateInvoicePage() {
 
         <div style={{ marginTop: 10 }}>
           <small>Пример товара (подсказка):</small><br />
-          <span className="badge">{exampleRow.name} — {exampleRow.cat} → хранение: {exampleRow.posting}</span>
+          <span className="badge">{exampleRow.name} - {exampleRow.cat} -> хранение: {exampleRow.posting}</span>
         </div>
 
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => nav("/")}>Отмена</button>
           <button className="btn primary" onClick={create} disabled={creating}>
-            {creating ? "Создаю…" : "Создать накладную"}
+            {creating ? "Создаю..." : "Создать накладную"}
           </button>
         </div>
       </div>
