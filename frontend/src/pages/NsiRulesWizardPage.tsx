@@ -522,9 +522,9 @@ export default function NsiRulesWizardPage() {
               <label>
                 <small>Тип конвертации</small><br />
                 <select value={itemRuleType} onChange={(e) => setItemRuleType(e.target.value as ItemRuleType)}>
-                  <option value="pcs_weight">COUNT <-> MASS (pcs_weight)</option>
-                  <option value="kg_per_m">LENGTH <-> MASS (kg_per_m)</option>
-                  <option value="density">MASS <-> VOLUME (density)</option>
+                  <option value="pcs_weight">COUNT ↔ MASS (pcs_weight)</option>
+                  <option value="kg_per_m">LENGTH ↔ MASS (kg_per_m)</option>
+                  <option value="density">MASS ↔ VOLUME (density)</option>
                 </select>
               </label>
             </>
