@@ -14,7 +14,12 @@ type Line = {
   item_id: number | null;
   qty: string;
   uom_code: string;
+  barcode: string;
+  supplier_code: string;
+  note: string;
 };
+
+type LineDraft = Omit<Line, "key">;
 
 type Check = {
   state: "idle" | "checking" | "ok" | "missing" | "mismatch";
@@ -91,6 +96,17 @@ export default function CreateInvoicePage() {
   const [creating, setCreating] = useState(false);
   const [checks, setChecks] = useState<Record<string, Check>>({});
 
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorIndex, setEditorIndex] = useState<number | null>(null);
+  const [editor, setEditor] = useState<LineDraft>({
+    item_id: null,
+    qty: "1",
+    uom_code: "KG",
+    barcode: "",
+    supplier_code: "",
+    note: "",
+  });
+
   const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
   const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "-");
 
@@ -98,6 +114,7 @@ export default function CreateInvoicePage() {
   const uomByCode = useMemo(() => new Map<string, any>(uoms.map((u: any) => [up(u.code), u])), [uoms]);
   const uomCatCodeById = useMemo(() => new Map<number, string>(uomCats.map((c: any) => [c.id, up(c.code)])), [uomCats]);
   const uomCodeById = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-");
+  const uomOptions = useMemo(() => (uoms ?? []).map((u: any) => u.code), [uoms]);
 
   function uomCategoryCodeByUomCode(code: string | null | undefined): string | null {
     if (!code) return null;
@@ -153,11 +170,6 @@ export default function CreateInvoicePage() {
       setUoms(u ?? []);
       setUomCats(uc ?? []);
       setCats(c ?? []);
-
-      if (lines.length === 0) {
-        const firstItem = (it ?? [])[0]?.id ?? null;
-        setLines([{ key: uid(), item_id: firstItem, qty: "1", uom_code: "KG" }]);
-      }
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
@@ -168,31 +180,84 @@ export default function CreateInvoicePage() {
     // eslint-disable-next-line
   }, [token]);
 
-  const uomOptions = useMemo(() => (uoms ?? []).map((u: any) => u.code), [uoms]);
+  useEffect(() => {
+    if (!editorOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEditorOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editorOpen]);
 
-  function updateLine(idx: number, patch: Partial<Line>) {
-    setLines((prev) => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  function startAddLine() {
+    const firstItemId = items[0]?.id ?? null;
+    const it = items.find((x: any) => x.id === firstItemId);
+    setEditorIndex(null);
+    setEditor({
+      item_id: firstItemId,
+      qty: "1",
+      uom_code: itemPostingUomCode(it) ?? "KG",
+      barcode: "",
+      supplier_code: "",
+      note: "",
+    });
+    setEditorOpen(true);
   }
 
-  function addLine() {
-    const firstItem = items[0]?.id ?? null;
-    setLines((prev) => [...prev, { key: uid(), item_id: firstItem, qty: "1", uom_code: "KG" }]);
+  function startEditLine(idx: number) {
+    const l = lines[idx];
+    if (!l) return;
+    setEditorIndex(idx);
+    setEditor({
+      item_id: l.item_id,
+      qty: l.qty,
+      uom_code: l.uom_code,
+      barcode: l.barcode ?? "",
+      supplier_code: l.supplier_code ?? "",
+      note: l.note ?? "",
+    });
+    setEditorOpen(true);
+  }
+
+  function onEditorItemChange(itemId: number) {
+    const it = items.find((x: any) => x.id === itemId);
+    const posting = itemPostingUomCode(it);
+    setEditor((prev) => ({
+      ...prev,
+      item_id: itemId,
+      uom_code: prev.uom_code === "KG" && posting ? posting : prev.uom_code,
+    }));
+  }
+
+  function saveEditorLine() {
+    if (!editor.item_id) {
+      setErr("Выберите номенклатуру для строки.");
+      return;
+    }
+    if (Number(String(editor.qty).replace(",", ".")) <= 0) {
+      setErr("Количество должно быть больше 0.");
+      return;
+    }
+    setErr(null);
+
+    if (editorIndex === null) {
+      setLines((prev) => [...prev, { key: uid(), ...editor }]);
+    } else {
+      setLines((prev) => prev.map((l, idx) => (idx === editorIndex ? { ...l, ...editor } : l)));
+    }
+    setEditorOpen(false);
   }
 
   function removeLine(idx: number) {
+    const key = lines[idx]?.key;
     setLines((prev) => prev.filter((_, i) => i !== idx));
-  }
-
-  function setLineItem(idx: number, itemId: number) {
-    const it = items.find((x: any) => x.id === itemId);
-    const posting = itemPostingUomCode(it);
-    setLines((prev) =>
-      prev.map((l, i) => {
-        if (i !== idx) return l;
-        const nextUom = l.uom_code === "KG" && posting ? posting : l.uom_code;
-        return { ...l, item_id: itemId, uom_code: nextUom };
-      })
-    );
+    if (key) {
+      setChecks((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   }
 
   function suggestRuleUrl(args: {
@@ -257,8 +322,9 @@ export default function CreateInvoicePage() {
           item_id: line.item_id,
           qty: "1",
           from_uom: line.uom_code,
-          uom_code: line.uom_code,
           context: {},
+          barcode: line.barcode || undefined,
+          supplier_code: line.supplier_code || undefined,
         },
       });
 
@@ -333,7 +399,7 @@ export default function CreateInvoicePage() {
   }
 
   const signature = useMemo(
-    () => lines.map((l) => `${l.key}:${l.item_id ?? ""}:${l.uom_code}`).join("|"),
+    () => lines.map((l) => `${l.key}:${l.item_id ?? ""}:${l.uom_code}:${l.barcode}:${l.supplier_code}`).join("|"),
     [lines]
   );
 
@@ -376,7 +442,7 @@ export default function CreateInvoicePage() {
     });
 
     if (bad.length > 0) {
-      setErr("Нельзя создать накладную: для одной или нескольких строк нет подходящего правила (или итоговая ЕИ не совпадает с хранением). Создайте правила и попробуйте снова.");
+      setErr("Нельзя создать накладную: для одной или нескольких строк нет подходящего правила (или итоговая ЕИ не совпадает с хранением).");
       return;
     }
 
@@ -386,14 +452,21 @@ export default function CreateInvoicePage() {
     const cleanLines = lines
       .map((l, idx) => {
         const it = items.find((x: any) => x.id === l.item_id);
+        const context: Record<string, unknown> = {
+          item_name: it?.name ?? "",
+        };
+        if ((l.note ?? "").trim()) {
+          context.note = (l.note ?? "").trim();
+        }
+
         return {
           line_no: idx + 1,
           item_id: l.item_id,
           qty: l.qty,
           uom_code: l.uom_code,
-          context: {
-            item_name: it?.name ?? "",
-          },
+          context,
+          barcode: l.barcode ?? "",
+          supplier_code: l.supplier_code ?? "",
         };
       })
       .filter((l) => !!l.item_id && !!l.qty && !!l.uom_code);
@@ -422,7 +495,7 @@ export default function CreateInvoicePage() {
     <div className="card">
       <PageHeader
         title="Создание накладной"
-        subtitle="При заполнении строк показываем, есть ли правило для перевода. Если ЕИ уже совпадает с хранением, это OK."
+        subtitle="Табличная часть и проверка правил конвертации по строкам."
         right={<button className="btn" onClick={() => nav("/")}>Отмена</button>}
       />
 
@@ -449,44 +522,40 @@ export default function CreateInvoicePage() {
 
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h4 style={{ margin: 0 }}>Строки</h4>
-          <button className="btn" onClick={addLine}>+ Добавить строку</button>
+          <h4 style={{ margin: 0 }}>Табличная часть</h4>
+          <button className="btn" onClick={startAddLine}>+ Добавить номенклатуру</button>
         </div>
 
-        <table style={{ marginTop: 8 }}>
+        <table className="compact-table invoice-entry-table" style={{ marginTop: 8 }}>
           <thead>
             <tr>
               <th>#</th>
-              <th>Товар</th>
+              <th>Номенклатура</th>
               <th>Кол-во</th>
-              <th>ЕИ (в документе)</th>
-              <th>Правило</th>
+              <th>ЕИ</th>
+              <th>Штрихкод</th>
+              <th>Код поставщика</th>
+              <th>Проверка</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             {lines.map((l, idx) => {
               const ch = checks[l.key];
+              const it = items.find((x: any) => x.id === l.item_id);
               return (
                 <tr key={l.key}>
                   <td>{idx + 1}</td>
                   <td>
-                    <select value={l.item_id ?? ""} onChange={(e) => setLineItem(idx, Number(e.target.value))}>
-                      {items.map((it: any) => (
-                        <option key={it.id} value={it.id}>
-                          {it.name} - {catName(it.category)} (хранение: {itemPostingUomCode(it) ?? "-"})
-                        </option>
-                      ))}
-                    </select>
+                    <div>{it?.name ?? "-"}</div>
+                    <small>
+                      {catName(it?.category)} | хранение: {itemPostingUomCode(it) ?? "-"}
+                    </small>
                   </td>
-                  <td>
-                    <input value={l.qty} onChange={(e) => updateLine(idx, { qty: e.target.value })} />
-                  </td>
-                  <td>
-                    <select value={l.uom_code} onChange={(e) => updateLine(idx, { uom_code: e.target.value })}>
-                      {uomOptions.map((c) => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </td>
+                  <td className="num">{l.qty}</td>
+                  <td>{l.uom_code}</td>
+                  <td>{l.barcode || "-"}</td>
+                  <td>{l.supplier_code || "-"}</td>
                   <td>
                     {!ch || ch.state === "checking" || ch.state === "idle" ? (
                       <small>Проверяю...</small>
@@ -500,7 +569,7 @@ export default function CreateInvoicePage() {
                         <div className="row" style={{ gap: 8, justifyContent: "flex-start" }}>
                           <span className="badge">не совпадает ЕИ</span>
                           {ch.suggestedUrl ? (
-                            <button className="btn" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
+                            <button className="btn btn-tight" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
                           ) : null}
                         </div>
                         {ch.message ? <div><small>{ch.message}</small></div> : null}
@@ -510,28 +579,29 @@ export default function CreateInvoicePage() {
                         <div className="row" style={{ gap: 8, justifyContent: "flex-start" }}>
                           <span className="badge">нет правила</span>
                           {ch.suggestedUrl ? (
-                            <button className="btn" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
+                            <button className="btn btn-tight" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
                           ) : null}
                         </div>
                         {ch.message ? <div><small>{ch.message}</small></div> : null}
                       </div>
                     )}
                   </td>
-                  <td style={{ textAlign: "right" }}>
-                    <button className="btn" onClick={() => removeLine(idx)} disabled={lines.length <= 1}>Удалить</button>
+                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                    <button className="btn btn-tight" onClick={() => startEditLine(idx)} style={{ marginRight: 6 }}>Изменить</button>
+                    <button className="btn btn-tight" onClick={() => removeLine(idx)}>Удалить</button>
                   </td>
                 </tr>
               );
             })}
             {lines.length === 0 ? (
-              <tr><td colSpan={6}><small>Нет строк. Добавьте строку.</small></td></tr>
+              <tr><td colSpan={8}><small>Пока нет строк. Добавьте номенклатурную позицию.</small></td></tr>
             ) : null}
           </tbody>
         </table>
 
         <div style={{ marginTop: 10 }}>
-          <small>Пример товара (подсказка):</small><br />
-            <span className="badge">{exampleRow.name} - {exampleRow.cat} → хранение: {exampleRow.posting}</span>
+          <small>Подсказка по первой строке:</small><br />
+          <span className="badge">{exampleRow.name} - {exampleRow.cat} → хранение: {exampleRow.posting}</span>
         </div>
 
         <div className="row" style={{ marginTop: 12 }}>
@@ -541,6 +611,64 @@ export default function CreateInvoicePage() {
           </button>
         </div>
       </div>
+
+      {editorOpen && (
+        <div className="modal-backdrop" onClick={() => setEditorOpen(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+              <h4 style={{ margin: 0 }}>{editorIndex === null ? "Добавление позиции" : "Редактирование позиции"}</h4>
+              <button className="btn btn-tight" onClick={() => setEditorOpen(false)}>Закрыть</button>
+            </div>
+
+            <div className="modal-grid">
+              <label style={{ gridColumn: "1 / -1" }}>
+                <small>Номенклатура</small><br />
+                <select value={editor.item_id ?? ""} onChange={(e) => onEditorItemChange(Number(e.target.value))} style={{ width: "100%" }}>
+                  {items.map((it: any) => (
+                    <option key={it.id} value={it.id}>
+                      {it.name} - {catName(it.category)} (хранение: {itemPostingUomCode(it) ?? "-"})
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label>
+                <small>Количество</small><br />
+                <input value={editor.qty} onChange={(e) => setEditor((v) => ({ ...v, qty: e.target.value }))} />
+              </label>
+
+              <label>
+                <small>ЕИ документа</small><br />
+                <select value={editor.uom_code} onChange={(e) => setEditor((v) => ({ ...v, uom_code: e.target.value }))}>
+                  {uomOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+
+              <label>
+                <small>Штрихкод</small><br />
+                <input value={editor.barcode} onChange={(e) => setEditor((v) => ({ ...v, barcode: e.target.value }))} />
+              </label>
+
+              <label>
+                <small>Код поставщика</small><br />
+                <input value={editor.supplier_code} onChange={(e) => setEditor((v) => ({ ...v, supplier_code: e.target.value }))} />
+              </label>
+
+              <label style={{ gridColumn: "1 / -1" }}>
+                <small>Комментарий (доп. реквизит)</small><br />
+                <input value={editor.note} onChange={(e) => setEditor((v) => ({ ...v, note: e.target.value }))} style={{ width: "100%" }} />
+              </label>
+            </div>
+
+            <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setEditorOpen(false)}>Отмена</button>
+              <button className="btn primary" onClick={saveEditorLine}>
+                {editorIndex === null ? "Добавить позицию" : "Сохранить"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -172,7 +172,10 @@ export default function InvoicesPage() {
           </thead>
           <tbody>
             {filtered.map((r: any) => {
-              const lineCount = Array.isArray(r.lines) ? r.lines.length : "-";
+              const lineCount =
+                typeof r.line_count === "number"
+                  ? r.line_count
+                  : (Array.isArray(r.lines) ? r.lines.length : "-");
               return (
                 <tr key={r.id}>
                   <td className="num mono id-col">{r.id}</td>

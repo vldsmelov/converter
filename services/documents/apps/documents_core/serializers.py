@@ -60,3 +60,21 @@ class InvoiceSerializer(serializers.ModelSerializer):
             line_no = ld.pop("line_no", None) or i
             InvoiceLine.objects.create(invoice=invoice, line_no=line_no, **ld)
         return invoice
+
+
+class InvoiceListSerializer(serializers.ModelSerializer):
+    line_count = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "id",
+            "number",
+            "supplier",
+            "doc_date",
+            "status",
+            "error",
+            "created_at",
+            "updated_at",
+            "line_count",
+        ]

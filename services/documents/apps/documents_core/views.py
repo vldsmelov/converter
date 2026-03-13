@@ -1,4 +1,5 @@
 from django.http import FileResponse, Http404
+from django.db.models import Count
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -6,7 +7,7 @@ from rest_framework.response import Response
 from apps.authn.role_permissions import RoleByMethodPermission
 
 from .models import Invoice, InvoiceFile
-from .serializers import InvoiceSerializer
+from .serializers import InvoiceListSerializer, InvoiceSerializer
 from .tasks import calculate_invoice, generate_invoice_outputs
 from .storage import get_minio_client, get_bucket, MinioStream
 
@@ -16,16 +17,31 @@ def _realm_roles(request) -> set[str]:
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
-    queryset = (
-        Invoice.objects.prefetch_related("lines", "lines__converted", "files")
-        .all()
-        .order_by("-created_at")
-    )
     serializer_class = InvoiceSerializer
     permission_classes = [RoleByMethodPermission]
 
     read_role = "documents.invoice.read"
     write_role = "documents.invoice.write"
+
+    def get_queryset(self):
+        # Optimize list endpoint: avoid heavy nested serialization (lines/files/presigned urls).
+        if self.action == "list":
+            return (
+                Invoice.objects
+                .all()
+                .annotate(line_count=Count("lines"))
+                .order_by("-created_at")
+            )
+        return (
+            Invoice.objects.prefetch_related("lines", "lines__converted", "files")
+            .all()
+            .order_by("-created_at")
+        )
+
+    def get_serializer_class(self):
+        if self.action == "list":
+            return InvoiceListSerializer
+        return InvoiceSerializer
 
     @action(detail=True, methods=["post"], url_path="calculate")
     def calculate(self, request, pk=None):

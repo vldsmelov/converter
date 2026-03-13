@@ -1,44 +1,87 @@
 :root {
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji", "Segoe UI Emoji";
   line-height: 1.4;
+  --bg: #0b0f14;
+  --text: #e5e7eb;
+  --muted: #9ca3af;
+  --link: #93c5fd;
+  --surface: #111827;
+  --surface-2: #0b1220;
+  --border: #1f2937;
+  --border-strong: #334155;
+  --btn-bg: #1f2937;
+  --btn-hover: #0f172a;
+  --btn-text: #e5e7eb;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --table-head-bg: #0f172a;
 }
+
+:root[data-theme="light"] {
+  --bg: #f6f8fb;
+  --text: #0f172a;
+  --muted: #475569;
+  --link: #1d4ed8;
+  --surface: #ffffff;
+  --surface-2: #f8fafc;
+  --border: #dbe4ee;
+  --border-strong: #cbd5e1;
+  --btn-bg: #f1f5f9;
+  --btn-hover: #e2e8f0;
+  --btn-text: #0f172a;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --table-head-bg: #eef2f7;
+}
+
 body {
   margin: 0;
-  background: #0b0f14;
-  color: #e5e7eb;
+  background: var(--bg);
+  color: var(--text);
 }
-a { color: #93c5fd; text-decoration: none; }
+a { color: var(--link); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.app-shell { min-height: calc(100vh - 32px); display: flex; flex-direction: column; }
+.app-main { flex: 1; }
+.app-footer {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(90deg, var(--surface-2), var(--surface));
+  text-align: center;
+}
 .card {
-  background: #111827;
-  border: 1px solid #1f2937;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 12px;
 }
 .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .btn {
-  background: #1f2937;
-  border: 1px solid #334155;
-  color: #e5e7eb;
+  background: var(--btn-bg);
+  border: 1px solid var(--border-strong);
+  color: var(--btn-text);
   padding: 8px 12px;
   border-radius: 10px;
   cursor: pointer;
 }
-.btn:hover { background: #0f172a; }
-.btn.primary { background: #2563eb; border-color: #1d4ed8; }
-.btn.primary:hover { background: #1d4ed8; }
-.badge { padding: 2px 8px; border-radius: 999px; border: 1px solid #334155; font-size: 12px; }
+.btn:hover { background: var(--btn-hover); }
+.btn.primary { background: var(--primary); border-color: var(--primary-hover); color: #fff; }
+.btn.primary:hover { background: var(--primary-hover); }
+.btn.icon-btn { width: 34px; height: 34px; padding: 0; font-size: 18px; line-height: 1; }
+.badge { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border-strong); font-size: 12px; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; padding: 8px; border-bottom: 1px solid #1f2937; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
 input, select {
-  background: #0b1220;
-  border: 1px solid #334155;
-  color: #e5e7eb;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
   padding: 8px 10px;
   border-radius: 10px;
 }
-small { color: #9ca3af; }
+small { color: var(--muted); }
 
 .compact-table th,
 .compact-table td {
@@ -68,8 +111,8 @@ small { color: #9ca3af; }
 }
 
 .invoice-meta-item {
-  background: #0b1220;
-  border: 1px solid #334155;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
   padding: 8px;
 }
@@ -111,8 +154,8 @@ small { color: #9ca3af; }
   position: sticky;
   top: 0;
   z-index: 2;
-  background: #0f172a;
-  border-bottom: 1px solid #334155;
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--border-strong);
 }
 
 .btn.btn-tight {
@@ -124,7 +167,7 @@ small { color: #9ca3af; }
 .invoice-list-wrap {
   max-height: 68vh;
   overflow: auto;
-  border: 1px solid #1f2937;
+  border: 1px solid var(--border);
   border-radius: 10px;
 }
 
@@ -139,27 +182,74 @@ small { color: #9ca3af; }
 .invoice-list-table .action-col {
   position: sticky;
   right: 0;
-  background: #111827;
+  background: var(--surface);
   z-index: 1;
-  border-left: 1px solid #334155;
+  border-left: 1px solid var(--border-strong);
 }
 
 .invoice-list-table thead .action-col {
   top: 0;
   z-index: 4;
-  background: #0f172a;
+  background: var(--table-head-bg);
 }
 
 .invoice-list-table .id-col {
   position: sticky;
   left: 0;
-  background: #111827;
+  background: var(--surface);
   z-index: 1;
-  border-right: 1px solid #334155;
+  border-right: 1px solid var(--border-strong);
 }
 
 .invoice-list-table thead .id-col {
   top: 0;
   z-index: 5;
-  background: #0f172a;
+  background: var(--table-head-bg);
+}
+
+.invoice-entry-table th,
+.invoice-entry-table td {
+  vertical-align: top;
+}
+
+.invoice-entry-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(2, 6, 23, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-card {
+  width: min(760px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35);
+}
+
+.modal-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+}
+
+.modal-grid input,
+.modal-grid select {
+  width: 100%;
+}
+
+@media (max-width: 720px) {
+  .modal-grid {
+    grid-template-columns: 1fr;
+  }
 }
