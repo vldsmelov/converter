@@ -8,10 +8,12 @@ from apps.catalog.models import CategoryPackageSpec, ItemCategory
 
 from .models import (
     ConversionRule,
+    DefaultFieldType,
     GlobalUomRule,
     Item,
     ItemPolicy,
     PackageSpec,
+    SystemDefaultField,
     UoM,
     UoMCategory,
 )
@@ -194,3 +196,21 @@ class GlobalUomRuleSerializer(serializers.ModelSerializer):
             "created_at",
         ]
         read_only_fields = ["id", "created_at"]
+
+
+class SystemDefaultFieldSerializer(serializers.ModelSerializer):
+    field_type = serializers.ChoiceField(choices=DefaultFieldType.choices)
+
+    class Meta:
+        model = SystemDefaultField
+        fields = [
+            "id",
+            "code",
+            "label",
+            "field_type",
+            "default_value",
+            "required",
+            "is_system",
+            "created_at",
+        ]
+        read_only_fields = ["id", "is_system", "created_at"]

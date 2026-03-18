@@ -235,7 +235,7 @@ function defaultItemPreset(ruleType: ItemRuleType, uoms: any[]): { fromId: numbe
 }
 
 export default function NsiRulesWizardPage() {
-  const { token } = useAuth();
+  const { token, keycloak } = useAuth();
   const nav = useNavigate();
   const location = useLocation();
   const { scope: scopeParam, id: idParam } = useParams<{ scope?: string; id?: string }>();
@@ -260,6 +260,8 @@ export default function NsiRulesWizardPage() {
   const [items, setItems] = useState<Item[]>([]);
   const [itemCats, setItemCats] = useState<ItemCat[]>([]);
   const [err, setErr] = useState<string | null>(null);
+  const realmRoles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
+  const canCreateDefaultField = realmRoles.includes("nsi.default_field.write") || realmRoles.includes("system.admin");
 
   const [fromUomId, setFromUomId] = useState<number | null>(null);
   const [toUomId, setToUomId] = useState<number | null>(null);
@@ -285,6 +287,12 @@ export default function NsiRulesWizardPage() {
   });
 
   const [exampleInQty, setExampleInQty] = useState("1");
+  const [makeDefaultField, setMakeDefaultField] = useState(false);
+  const [defaultFieldCode, setDefaultFieldCode] = useState("");
+  const [defaultFieldLabel, setDefaultFieldLabel] = useState("");
+  const [defaultFieldType, setDefaultFieldType] = useState<"string" | "number" | "boolean">("string");
+  const [defaultFieldValue, setDefaultFieldValue] = useState("");
+  const [defaultFieldRequired, setDefaultFieldRequired] = useState(false);
 
   const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
   const uomCatsById = useMemo(() => new Map<number, any>(uomCats.map((c: any) => [c.id, c])), [uomCats]);
@@ -578,6 +586,37 @@ export default function NsiRulesWizardPage() {
     return "Вес 1 PCS (kg_per_pc, кг)";
   }, [scope, itemRuleType]);
 
+  async function createDefaultFieldIfNeeded() {
+    if (!token || !canCreateDefaultField || !makeDefaultField) return;
+
+    const fieldCode = defaultFieldCode.trim();
+    if (!fieldCode) throw new Error("Укажите код поля по умолчанию.");
+
+    try {
+      await requestJson({
+        method: "POST",
+        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`,
+        token,
+        body: {
+          code: fieldCode,
+          label: defaultFieldLabel.trim() || fieldCode,
+          field_type: defaultFieldType,
+          default_value: defaultFieldValue.trim(),
+          required: defaultFieldRequired,
+        },
+      });
+    } catch (e) {
+      if (!(e instanceof ApiError) || (e.status !== 400 && e.status !== 409)) throw e;
+      const rows = await requestJson<any[]>({
+        method: "GET",
+        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`,
+        token,
+      });
+      const exists = (rows ?? []).some((f: any) => String(f.code ?? "").trim().toLowerCase() === fieldCode.toLowerCase());
+      if (!exists) throw e;
+    }
+  }
+
   async function saveRule() {
     if (!token) return;
     if (!canSave) return;
@@ -590,6 +629,7 @@ export default function NsiRulesWizardPage() {
     setErr(null);
 
     try {
+      await createDefaultFieldIfNeeded();
       if (scope === "global") {
         await requestJson({
           method: isEditMode ? "PUT" : "POST",
@@ -899,6 +939,43 @@ export default function NsiRulesWizardPage() {
             {validations.map((v, idx) => (
               <div key={idx} style={{ color: "#fca5a5" }}>* {v}</div>
             ))}
+          </div>
+        )}
+
+        {canCreateDefaultField && (
+          <div style={{ marginTop: 12 }}>
+            <label className="row" style={{ gap: 8 }}>
+              <input type="checkbox" checked={makeDefaultField} onChange={(e) => setMakeDefaultField(e.target.checked)} />
+              <small>поле по умолчанию</small>
+            </label>
+            {makeDefaultField && (
+              <div className="row" style={{ marginTop: 8 }}>
+                <label>
+                  <small>Код поля</small><br />
+                  <input value={defaultFieldCode} onChange={(e) => setDefaultFieldCode(e.target.value)} />
+                </label>
+                <label>
+                  <small>Название</small><br />
+                  <input value={defaultFieldLabel} onChange={(e) => setDefaultFieldLabel(e.target.value)} />
+                </label>
+                <label>
+                  <small>Тип</small><br />
+                  <select value={defaultFieldType} onChange={(e) => setDefaultFieldType(e.target.value as "string" | "number" | "boolean")}>
+                    <option value="string">string</option>
+                    <option value="number">number</option>
+                    <option value="boolean">boolean</option>
+                  </select>
+                </label>
+                <label>
+                  <small>Значение по умолчанию</small><br />
+                  <input value={defaultFieldValue} onChange={(e) => setDefaultFieldValue(e.target.value)} />
+                </label>
+                <label className="row" style={{ gap: 6 }}>
+                  <input type="checkbox" checked={defaultFieldRequired} onChange={(e) => setDefaultFieldRequired(e.target.checked)} />
+                  <small>обязательное</small>
+                </label>
+              </div>
+            )}
           </div>
         )}
 

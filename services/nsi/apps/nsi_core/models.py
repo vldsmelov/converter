@@ -215,3 +215,39 @@ class ConversionRule(models.Model):
     def __str__(self) -> str:
         scope = self.item_id if self.item_id else "GLOBAL"
         return f"{scope} {self.rule_type} v{self.version} ({self.from_category.code}<->{self.to_category.code}) [{self.status}]"
+
+
+class DefaultFieldType(models.TextChoices):
+    STRING = "string", "String"
+    NUMBER = "number", "Number"
+    BOOLEAN = "boolean", "Boolean"
+
+
+class SystemDefaultField(models.Model):
+    """Immutable field definition created by admin and preserved on reset."""
+
+    code = models.CharField(max_length=64, unique=True)  # e.g. project_code
+    label = models.CharField(max_length=128)  # display name
+    field_type = models.CharField(max_length=16, choices=DefaultFieldType.choices, default=DefaultFieldType.STRING)
+    default_value = models.CharField(max_length=256, blank=True, default="")
+    required = models.BooleanField(default=False)
+    is_system = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+        indexes = [
+            models.Index(fields=["is_system", "code"]),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            # Definitions are immutable by contract.
+            raise ValidationError("SystemDefaultField is immutable and cannot be updated")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValidationError("SystemDefaultField is immutable and cannot be deleted")
+
+    def __str__(self) -> str:
+        return f"{self.code} ({self.field_type})"

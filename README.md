@@ -87,3 +87,29 @@
 ## Р”РѕРєСѓРјРµРЅС‚Р°С†РёСЏ
 - РћРїРµСЂР°С†РёРѕРЅРЅС‹Р№ runbook: [docs/RUNBOOK.md](docs/RUNBOOK.md)
 - Frontend Р·Р°РјРµС‚РєРё: [frontend/README.md](frontend/README.md)
+
+## Admin reset (test mode)
+- Realm role: `system.admin`
+- Default admin user (realm import): `administrator` / `administrator`
+- Reset endpoints (POST, admin only):
+  - NSI: `/api/v1/admin/reset-defaults/`
+  - Documents: `/api/v1/admin/reset-defaults/`
+- Frontend: admin sees a reset icon button in the header.
+
+## Администрирование пользователей и ролей
+- В UI добавлена страница `/admin/console` (видна только с ролью `system.admin`).
+- Администратор может:
+  - создавать пользователей,
+  - назначать/обновлять набор ролей пользователю,
+  - создавать роли-наборы (`bundle.*`) из существующих permissions.
+- Backend API (NSI, только `system.admin`):
+  - `GET/POST /api/v1/admin/iam/roles/`
+  - `GET/POST /api/v1/admin/iam/users/`
+  - `PUT /api/v1/admin/iam/users/{user_id}/roles/`
+
+## Системные поля по умолчанию
+- Администратор может создавать неизменяемые системные поля:
+  - `GET/POST /api/v1/admin/default-fields/` (admin only)
+  - `GET /api/v1/default-fields/` (read для обычных ролей NSI)
+- После создания системные поля нельзя изменить/удалить через API.
+- При очистке данных (`/api/v1/admin/reset-defaults/`) системные поля сохраняются.

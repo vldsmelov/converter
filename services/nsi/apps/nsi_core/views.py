@@ -17,8 +17,8 @@ from .serializers import (
     PackageSpecSerializer,
     UoMCategorySerializer,
     UoMSerializer,
-    GlobalUomRuleSerializer,
 )
+from .defaults import reset_to_defaults
 
 
 class PackageSpecViewSet(viewsets.ModelViewSet):
@@ -92,6 +92,15 @@ class ConversionRuleViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleByMethodPermission]
     read_role = "nsi.rule.read"
     write_role = "nsi.rule.write"
+
+
+class AdminResetDefaultsView(APIView):
+    permission_classes = [RoleByMethodPermission]
+    write_role = "system.admin"
+
+    def post(self, request):
+        summary = reset_to_defaults()
+        return Response({"ok": True, "summary": summary})
 
 
 def _date_in_range(d: date, start, end) -> bool:

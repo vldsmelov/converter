@@ -17,6 +17,10 @@ type Line = {
   barcode: string;
   supplier_code: string;
   note: string;
+  custom_field_code: string;
+  custom_field_label: string;
+  custom_field_value: string;
+  make_default_field: boolean;
 };
 
 type LineDraft = Omit<Line, "key">;
@@ -79,13 +83,14 @@ function parseConvertError(error: unknown): ParsedConvertError | null {
 }
 
 export default function CreateInvoicePage() {
-  const { token } = useAuth();
+  const { token, keycloak } = useAuth();
   const nav = useNavigate();
 
   const [items, setItems] = useState<Item[]>([]);
   const [uoms, setUoms] = useState<Uom[]>([]);
   const [uomCats, setUomCats] = useState<UomCat[]>([]);
   const [cats, setCats] = useState<Cat[]>([]);
+  const [defaultFields, setDefaultFields] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   const [number, setNumber] = useState(randNo());
@@ -105,7 +110,18 @@ export default function CreateInvoicePage() {
     barcode: "",
     supplier_code: "",
     note: "",
+    custom_field_code: "",
+    custom_field_label: "",
+    custom_field_value: "",
+    make_default_field: false,
   });
+
+  const realmRoles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
+  const canCreateDefaultField = realmRoles.includes("nsi.default_field.write") || realmRoles.includes("system.admin");
+  const defaultFieldCodes = useMemo(
+    () => new Set((defaultFields ?? []).map((f: any) => String(f.code ?? "").trim()).filter(Boolean)),
+    [defaultFields]
+  );
 
   const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
   const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "-");
@@ -159,17 +175,19 @@ export default function CreateInvoicePage() {
     setErr(null);
 
     try {
-      const [it, u, uc, c] = await Promise.all([
+      const [it, u, uc, c, df] = await Promise.all([
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`, token }),
       ]);
 
       setItems(it ?? []);
       setUoms(u ?? []);
       setUomCats(uc ?? []);
       setCats(c ?? []);
+      setDefaultFields(df ?? []);
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
@@ -200,6 +218,10 @@ export default function CreateInvoicePage() {
       barcode: "",
       supplier_code: "",
       note: "",
+      custom_field_code: "",
+      custom_field_label: "",
+      custom_field_value: "",
+      make_default_field: false,
     });
     setEditorOpen(true);
   }
@@ -215,6 +237,10 @@ export default function CreateInvoicePage() {
       barcode: l.barcode ?? "",
       supplier_code: l.supplier_code ?? "",
       note: l.note ?? "",
+      custom_field_code: l.custom_field_code ?? "",
+      custom_field_label: l.custom_field_label ?? "",
+      custom_field_value: l.custom_field_value ?? "",
+      make_default_field: false,
     });
     setEditorOpen(true);
   }
@@ -229,7 +255,55 @@ export default function CreateInvoicePage() {
     }));
   }
 
-  function saveEditorLine() {
+  async function ensureDefaultFieldForEditor(current: LineDraft) {
+    if (!token || !canCreateDefaultField || !current.make_default_field) return;
+
+    const code = (current.custom_field_code ?? "").trim();
+    if (!code) {
+      throw new Error("Для поля по умолчанию укажите код доп. поля.");
+    }
+    if (defaultFieldCodes.has(code)) return;
+
+    try {
+      await requestJson<any>({
+        method: "POST",
+        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`,
+        token,
+        body: {
+          code,
+          label: (current.custom_field_label ?? "").trim() || code,
+          field_type: "string",
+          default_value: (current.custom_field_value ?? "").trim(),
+          required: false,
+        },
+      });
+      setDefaultFields((prev) => [
+        ...prev,
+        {
+          code,
+          label: (current.custom_field_label ?? "").trim() || code,
+          field_type: "string",
+          default_value: (current.custom_field_value ?? "").trim(),
+          required: false,
+          is_system: true,
+        },
+      ]);
+    } catch (e: any) {
+      if (e instanceof ApiError && (e.status === 400 || e.status === 409)) {
+        const refreshed = await requestJson<any[]>({
+          method: "GET",
+          url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`,
+          token,
+        });
+        setDefaultFields(refreshed ?? []);
+        const exists = (refreshed ?? []).some((f: any) => String(f.code ?? "").trim() === code);
+        if (exists) return;
+      }
+      throw e;
+    }
+  }
+
+  async function saveEditorLine() {
     if (!editor.item_id) {
       setErr("Выберите номенклатуру для строки.");
       return;
@@ -238,7 +312,18 @@ export default function CreateInvoicePage() {
       setErr("Количество должно быть больше 0.");
       return;
     }
+    if ((editor.custom_field_value ?? "").trim() && !(editor.custom_field_code ?? "").trim()) {
+      setErr("Для доп. поля укажите код.");
+      return;
+    }
     setErr(null);
+
+    try {
+      await ensureDefaultFieldForEditor(editor);
+    } catch (e: any) {
+      setErr(e?.message ?? String(e));
+      return;
+    }
 
     if (editorIndex === null) {
       setLines((prev) => [...prev, { key: uid(), ...editor }]);
@@ -458,6 +543,11 @@ export default function CreateInvoicePage() {
         if ((l.note ?? "").trim()) {
           context.note = (l.note ?? "").trim();
         }
+        const customCode = (l.custom_field_code ?? "").trim();
+        const customValue = (l.custom_field_value ?? "").trim();
+        if (customCode && customValue) {
+          context[customCode] = customValue;
+        }
 
         return {
           line_no: idx + 1,
@@ -658,11 +748,49 @@ export default function CreateInvoicePage() {
                 <small>Комментарий (доп. реквизит)</small><br />
                 <input value={editor.note} onChange={(e) => setEditor((v) => ({ ...v, note: e.target.value }))} style={{ width: "100%" }} />
               </label>
+
+              <label>
+                <small>Код доп. поля</small><br />
+                <input
+                  value={editor.custom_field_code}
+                  onChange={(e) => setEditor((v) => ({ ...v, custom_field_code: e.target.value }))}
+                  placeholder="project_code"
+                />
+              </label>
+
+              <label>
+                <small>Название доп. поля</small><br />
+                <input
+                  value={editor.custom_field_label}
+                  onChange={(e) => setEditor((v) => ({ ...v, custom_field_label: e.target.value }))}
+                  placeholder="Код проекта"
+                />
+              </label>
+
+              <label style={{ gridColumn: "1 / -1" }}>
+                <small>Значение доп. поля</small><br />
+                <input
+                  value={editor.custom_field_value}
+                  onChange={(e) => setEditor((v) => ({ ...v, custom_field_value: e.target.value }))}
+                  style={{ width: "100%" }}
+                />
+              </label>
+
+              {canCreateDefaultField && (
+                <label className="row" style={{ gridColumn: "1 / -1", gap: 8 }}>
+                  <input
+                    type="checkbox"
+                    checked={editor.make_default_field}
+                    onChange={(e) => setEditor((v) => ({ ...v, make_default_field: e.target.checked }))}
+                  />
+                  <small>поле по умолчанию</small>
+                </label>
+              )}
             </div>
 
             <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>
               <button className="btn" onClick={() => setEditorOpen(false)}>Отмена</button>
-              <button className="btn primary" onClick={saveEditorLine}>
+              <button className="btn primary" onClick={() => void saveEditorLine()}>
                 {editorIndex === null ? "Добавить позицию" : "Сохранить"}
               </button>
             </div>

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, Route, Routes } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import InvoicesPage from "./InvoicesPage";
@@ -18,6 +18,7 @@ import NsiPackageCreatePage from "./NsiPackageCreatePage";
 import NsiPackageEditPage from "./NsiPackageEditPage";
 import NsiRulesPage from "./NsiRulesPage";
 import NsiRulesWizardPage from "./NsiRulesWizardPage";
+import AdminConsolePage from "./AdminConsolePage";
 
 export default function App() {
   const { keycloak } = useAuth();
@@ -27,10 +28,18 @@ export default function App() {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
 
+  const realmRoles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
+  const isAdmin = realmRoles.includes("system.admin");
+
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     window.localStorage.setItem("ui_theme", theme);
   }, [theme]);
+
+  function openAdminPanel() {
+    const w = window.open("/admin/console", "admin_console", "popup=yes,width=1320,height=900");
+    if (!w) window.location.assign("/admin/console");
+  }
 
   return (
     <div className="container app-shell">
@@ -54,6 +63,16 @@ export default function App() {
         </div>
 
         <div className="row" style={{ gap: 8 }}>
+          {isAdmin && (
+            <button
+              className="btn btn-tight"
+              onClick={openAdminPanel}
+              title="Открыть админ-панель в отдельном окне"
+              aria-label="Открыть админ-панель"
+            >
+              {"\u0410\u0434\u043c\u0438\u043d \u043f\u0430\u043d\u0435\u043b\u044c"}
+            </button>
+          )}
           <button
             className="btn icon-btn"
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
@@ -91,6 +110,7 @@ export default function App() {
           <Route path="/nsi/rules" element={<NsiRulesPage />} />
           <Route path="/nsi/rules/new" element={<NsiRulesWizardPage />} />
           <Route path="/nsi/rules/:scope/:id/edit" element={<NsiRulesWizardPage />} />
+          <Route path="/admin/console" element={<AdminConsolePage />} />
         </Routes>
       </div>
 
@@ -100,4 +120,3 @@ export default function App() {
     </div>
   );
 }
-

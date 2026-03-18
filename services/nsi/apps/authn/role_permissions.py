@@ -19,4 +19,6 @@ class RoleByMethodPermission(BasePermission):
 
         if not required:
             return True
+        if isinstance(required, (list, tuple, set)):
+            return any(r in roles for r in required)
         return required in roles

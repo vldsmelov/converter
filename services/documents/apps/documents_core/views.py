@@ -1,8 +1,10 @@
 from django.http import FileResponse, Http404
 from django.db.models import Count
+from django.db import transaction
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from apps.authn.role_permissions import RoleByMethodPermission
 
@@ -104,3 +106,50 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if f.size:
             response["Content-Length"] = str(f.size)
         return response
+
+
+class AdminResetDefaultsView(APIView):
+    permission_classes = [RoleByMethodPermission]
+    write_role = "system.admin"
+
+    def post(self, request):
+        object_keys = list(
+            InvoiceFile.objects.exclude(object_key="").values_list("object_key", flat=True)
+        )
+        deleted_invoices = Invoice.objects.count()
+        deleted_files = InvoiceFile.objects.count()
+
+        with transaction.atomic():
+            Invoice.objects.all().delete()
+
+        removed_objects = 0
+        storage_errors: list[str] = []
+        if object_keys:
+            try:
+                client = get_minio_client()
+                bucket = get_bucket()
+                for key in object_keys:
+                    try:
+                        client.remove_object(bucket, key)
+                        removed_objects += 1
+                    except Exception as e:
+                        storage_errors.append(f"{key}: {e}")
+            except Exception as e:
+                storage_errors.append(str(e))
+
+        return Response(
+            {
+                "ok": True,
+                "summary": {
+                    "deleted": {
+                        "invoices": deleted_invoices,
+                        "invoice_files": deleted_files,
+                    },
+                    "storage": {
+                        "requested_objects": len(object_keys),
+                        "removed_objects": removed_objects,
+                        "errors_count": len(storage_errors),
+                    },
+                },
+            }
+        )

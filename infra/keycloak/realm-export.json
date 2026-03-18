@@ -15,13 +15,16 @@
       { "name": "nsi.package.write" },
       { "name": "nsi.rule.read" },
       { "name": "nsi.rule.write" },
+      { "name": "nsi.default_field.write" },
 
       { "name": "conversion.convert" },
 
       { "name": "documents.invoice.read" },
       { "name": "documents.invoice.write" },
       { "name": "documents.invoice.calculate" },
-      { "name": "documents.invoice.generate" }
+      { "name": "documents.invoice.generate" },
+
+      { "name": "system.admin" }
     ]
   },
   "clients": [
@@ -87,11 +90,47 @@
         "nsi.package.write",
         "nsi.rule.read",
         "nsi.rule.write",
+        "nsi.default_field.write",
 
         "documents.invoice.read",
         "documents.invoice.write",
         "documents.invoice.calculate",
         "documents.invoice.generate"
+      ]
+    },
+    {
+      "username": "administrator",
+      "enabled": true,
+      "email": "admin@test.test",
+      "emailVerified": true,
+      "firstName": "System",
+      "lastName": "Administrator",
+      "credentials": [
+        { "type": "password", "value": "administrator", "temporary": false }
+      ],
+      "realmRoles": [
+        "nsi.ping",
+        "documents.ping",
+        "conversion.ping",
+
+        "conversion.convert",
+
+        "nsi.uom.read",
+        "nsi.uom.write",
+        "nsi.item.read",
+        "nsi.item.write",
+        "nsi.package.read",
+        "nsi.package.write",
+        "nsi.rule.read",
+        "nsi.rule.write",
+        "nsi.default_field.write",
+
+        "documents.invoice.read",
+        "documents.invoice.write",
+        "documents.invoice.calculate",
+        "documents.invoice.generate",
+
+        "system.admin"
       ]
     },
     {
