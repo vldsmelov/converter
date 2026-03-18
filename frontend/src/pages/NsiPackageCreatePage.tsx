@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { ApiError, requestJson } from "../api/request";
+import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
 
@@ -9,7 +10,6 @@ export default function NsiPackageCreatePage() {
   const { token, keycloak } = useAuth();
   const nav = useNavigate();
 
-  const [items, setItems] = useState<any[]>([]);
   const [uoms, setUoms] = useState<any[]>([]);
   const [uomCats, setUomCats] = useState<any[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -39,17 +39,12 @@ export default function NsiPackageCreatePage() {
     if (!token) return;
     setErr(null);
     try {
-      const [it, u, uc] = await Promise.all([
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
+      const [u, uc] = await Promise.all([
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
       ]);
-      setItems(it ?? []);
       setUoms(u ?? []);
       setUomCats(uc ?? []);
-
-      const firstItem = (it ?? [])[0];
-      if (firstItem && itemId === null) setItemId(firstItem.id);
 
       const bag = (u ?? []).find((x: any) => x.code === "BAG") ?? (u ?? [])[0];
       const kg = (u ?? []).find((x: any) => x.code === "KG") ?? (u ?? [])[0];
@@ -134,9 +129,7 @@ export default function NsiPackageCreatePage() {
         <div className="row">
           <label style={{ flex: 1 }}>
             <small>Номенклатура</small><br />
-            <select value={itemId ?? ""} onChange={(e) => setItemId(toNum(e.target.value))} style={{ width: "100%" }}>
-              {items.map((it: any) => <option key={it.id} value={it.id}>{it.name}</option>)}
-            </select>
+            <ItemLookup token={token} value={itemId} onChange={(item) => setItemId(item?.id ?? null)} />
           </label>
           <label>
             <small>Упаковка</small><br />

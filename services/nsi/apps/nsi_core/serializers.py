@@ -161,6 +161,15 @@ class ItemSerializer(serializers.ModelSerializer):
         return instance
 
 
+class ItemLookupSerializer(serializers.ModelSerializer):
+    sku = serializers.CharField(required=False, allow_null=True, allow_blank=True)
+    policy = ItemPolicySerializer(required=False)
+
+    class Meta:
+        model = Item
+        fields = ["id", "sku", "name", "category", "is_active", "policy"]
+
+
 class ConversionRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = ConversionRule

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, requestJson } from "../api/request";
+import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
 
@@ -385,9 +386,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
         <div className="row">
           <label className="field" style={{ flex: 1, minWidth: 320 }}>
             <small>Номенклатура</small>
-            <select value={itemId ?? ""} onChange={(e) => setItemId(toNum(e.target.value))}>
-              {items.map((it: any) => <option key={it.id} value={it.id}>{it.name}</option>)}
-            </select>
+            <ItemLookup token={token} value={itemId} onChange={(item) => setItemId(item?.id ?? null)} />
           </label>
           <label className="field">
             <small>Входящая ЕИ</small>

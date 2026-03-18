@@ -4,6 +4,7 @@ from datetime import date
 
 from django.db import models
 from rest_framework import status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -13,6 +14,7 @@ from .models import ConversionRule, GlobalUomRule, Item, PackageSpec, UoM, UoMCa
 from .serializers import (
     ConversionRuleSerializer,
     GlobalUomRuleSerializer,
+    ItemLookupSerializer,
     ItemSerializer,
     PackageSpecSerializer,
     UoMCategorySerializer,
@@ -85,6 +87,48 @@ class ItemViewSet(viewsets.ModelViewSet):
     read_role = "nsi.item.read"
     write_role = "nsi.item.write"
     allow_anonymous_read = True
+
+    @action(detail=False, methods=["get"], url_path="lookup")
+    def lookup(self, request):
+        q = str(request.query_params.get("q", "")).strip()
+        active_raw = str(request.query_params.get("active_only", "1")).strip().lower()
+        active_only = active_raw not in {"0", "false", "no"}
+
+        try:
+            limit = max(1, min(100, int(request.query_params.get("limit", 20))))
+        except (TypeError, ValueError):
+            limit = 20
+
+        try:
+            offset = max(0, int(request.query_params.get("offset", 0)))
+        except (TypeError, ValueError):
+            offset = 0
+
+        qs = Item.objects.select_related("category", "policy", "policy__storage_uom", "policy__posting_uom").all()
+        if active_only:
+            qs = qs.filter(is_active=True)
+        if q:
+            qs = qs.filter(
+                models.Q(name__icontains=q)
+                | models.Q(sku__icontains=q)
+                | models.Q(packages__barcode__icontains=q)
+                | models.Q(packages__supplier_code__icontains=q)
+            ).distinct()
+
+        qs = qs.order_by("name", "id")
+        total = qs.count()
+        rows = list(qs[offset : offset + limit])
+
+        data = ItemLookupSerializer(rows, many=True).data
+        return Response(
+            {
+                "results": data,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "has_more": offset + limit < total,
+            }
+        )
 
 
 class ConversionRuleViewSet(viewsets.ModelViewSet):

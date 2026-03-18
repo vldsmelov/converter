@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { ApiError, requestJson } from "../api/request";
+import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
 
 type Item = any;
@@ -208,13 +209,11 @@ export default function CreateInvoicePage() {
   }, [editorOpen]);
 
   function startAddLine() {
-    const firstItemId = items[0]?.id ?? null;
-    const it = items.find((x: any) => x.id === firstItemId);
     setEditorIndex(null);
     setEditor({
-      item_id: firstItemId,
+      item_id: null,
       qty: "1",
-      uom_code: itemPostingUomCode(it) ?? "KG",
+      uom_code: "KG",
       barcode: "",
       supplier_code: "",
       note: "",
@@ -245,7 +244,7 @@ export default function CreateInvoicePage() {
     setEditorOpen(true);
   }
 
-  function onEditorItemChange(itemId: number) {
+  function onEditorItemChange(itemId: number | null) {
     const it = items.find((x: any) => x.id === itemId);
     const posting = itemPostingUomCode(it);
     setEditor((prev) => ({
@@ -717,13 +716,7 @@ export default function CreateInvoicePage() {
             <div className="modal-grid">
               <label className="field" style={{ gridColumn: "1 / -1" }}>
                 <small>Номенклатура</small>
-                <select value={editor.item_id ?? ""} onChange={(e) => onEditorItemChange(Number(e.target.value))}>
-                  {items.map((it: any) => (
-                    <option key={it.id} value={it.id}>
-                      {it.name} - {catName(it.category)} (хранение: {itemPostingUomCode(it) ?? "-"})
-                    </option>
-                  ))}
-                </select>
+                <ItemLookup token={token} value={editor.item_id} onChange={(item) => onEditorItemChange(item?.id ?? null)} />
               </label>
 
               <label className="field">
