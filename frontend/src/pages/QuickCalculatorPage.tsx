@@ -72,6 +72,11 @@ function parseConvertError(error: unknown): ParsedConvertError | null {
 export default function QuickCalculatorPage(props: { token?: string; publicMode?: boolean }) {
   const token = props.token;
   const nav = useNavigate();
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    const stored = window.localStorage.getItem("ui_theme");
+    if (stored === "dark" || stored === "light") return stored;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  });
 
   const [items, setItems] = useState<any[]>([]);
   const [uoms, setUoms] = useState<any[]>([]);
@@ -232,6 +237,12 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     resetOutput();
   }, [itemId, selectedItem, defaultTargetUom, defaultFromUom]);
 
+  useEffect(() => {
+    if (!props.publicMode) return;
+    document.documentElement.setAttribute("data-theme", theme);
+    window.localStorage.setItem("ui_theme", theme);
+  }, [theme, props.publicMode]);
+
   function resetOutput() {
     setResultQtyRaw("");
     setResultUom("");
@@ -344,23 +355,35 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   }
 
   return (
-    <div className="card">
+    <div className="card calculator-page">
       <PageHeader
         title="Калькулятор конвертации"
         subtitle="Быстрый расчёт без создания накладной: выберите номенклатуру, ЕИ и количество."
         right={
-          <button
-            className="btn"
-            onClick={() => {
-              if (props.publicMode) {
-                window.location.href = "/";
-                return;
-              }
-              nav("/");
-            }}
-          >
-            {props.publicMode ? "Войти в систему" : "К накладным"}
-          </button>
+          <div className="row" style={{ gap: 8 }}>
+            {props.publicMode && (
+              <button
+                className="btn icon-btn"
+                onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+                title={theme === "dark" ? "Светлая тема" : "Темная тема"}
+                aria-label={theme === "dark" ? "Светлая тема" : "Темная тема"}
+              >
+                {theme === "dark" ? "☀" : "☾"}
+              </button>
+            )}
+            <button
+              className="btn"
+              onClick={() => {
+                if (props.publicMode) {
+                  window.location.href = "/";
+                  return;
+                }
+                nav("/");
+              }}
+            >
+              {props.publicMode ? "Войти в систему" : "К накладным"}
+            </button>
+          </div>
         }
       />
 
@@ -382,11 +405,36 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
         </div>
       )}
 
-      <div className="card" style={{ marginTop: 12 }}>
+      <div className="card calculator-controls-card" style={{ marginTop: 12 }}>
         <div className="row">
-          <label className="field" style={{ flex: 1, minWidth: 320 }}>
+          <label className="field" style={{ flex: 1, minWidth: 360 }}>
             <small>Номенклатура</small>
             <ItemLookup token={token} value={itemId} onChange={(item) => setItemId(item?.id ?? null)} />
+          </label>
+          <label className="field" style={{ minWidth: 240, flex: 1 }}>
+            <small>Округление</small>
+            <select value={roundMode} onChange={(e) => setRoundMode(e.target.value as "item" | "custom")}>
+              <option value="item">По точности номенклатуры</option>
+              <option value="custom">Пользовательская точность</option>
+            </select>
+          </label>
+          <label className="field" style={{ width: 190, minWidth: 190 }}>
+            <small>Знаков после запятой</small>
+            <input
+              type="number"
+              min={0}
+              max={8}
+              value={roundPrecision}
+              disabled={roundMode !== "custom"}
+              onChange={(e) => setRoundPrecision(Math.max(0, Math.min(8, toNum(e.target.value))))}
+              style={{ width: 120 }}
+            />
+          </label>
+        </div>
+        <div className="row calculator-controls-row">
+          <label className="field">
+            <small>Количество</small>
+            <input value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 140 }} />
           </label>
           <label className="field">
             <small>Входящая ЕИ</small>
@@ -401,63 +449,31 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
             </select>
           </label>
         </div>
-
-        <div className="row" style={{ marginTop: 10 }}>
-          <label className="field">
-            <small>Количество</small>
-            <input value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 140 }} />
-          </label>
-
-          <label className="field">
-            <small>Округление</small>
-            <select value={roundMode} onChange={(e) => setRoundMode(e.target.value as "item" | "custom")}>
-              <option value="item">По точности номенклатуры</option>
-              <option value="custom">Пользовательская точность</option>
-            </select>
-          </label>
-
-          <label className="field">
-            <small>Знаков после запятой</small>
-            <input
-              type="number"
-              min={0}
-              max={8}
-              value={roundPrecision}
-              disabled={roundMode !== "custom"}
-              onChange={(e) => setRoundPrecision(Math.max(0, Math.min(8, toNum(e.target.value))))}
-              style={{ width: 120 }}
-            />
-          </label>
-
-          <div style={{ flex: 1 }} />
-
+        <div className="row calculator-actions-row">
           <button className="btn" onClick={swapUoms}>Поменять ЕИ</button>
           <button className="btn" onClick={applyDefaultTarget}>ЕИ по умолчанию</button>
           <button className="btn primary" onClick={calculate} disabled={calculating}>
             {calculating ? "Считаем..." : "Рассчитать"}
           </button>
         </div>
-
-        <div style={{ marginTop: 10 }}>
+        <div className="calculator-categories">
           <small>Категории: {fromCatCode} {"->"} {toCatCode}</small>
         </div>
       </div>
-
-      <div className="card" style={{ marginTop: 12 }}>
+      <div className="card calculator-result-card" style={{ marginTop: 12 }}>
         <h4 className="section-title">Результат</h4>
         {!resultQtyRaw ? (
           <small>Выполните расчёт, чтобы увидеть результат.</small>
         ) : (
           <>
-            <div className="row">
-              <span className="badge">
+            <div className="calculator-result-main">
+              <span className="badge calculator-result-badge">
                 {normalizeQty(qty)} {up(fromUom)} {"->"} {roundedQty} {resultUom}
               </span>
               {roundMode === "custom" && (
                 <small>Округлено до {roundPrecision} зн.</small>
               )}
             </div>
-
             {warnings.length > 0 && (
               <div style={{ marginTop: 8 }}>
                 {warnings.map((w, i) => (
@@ -468,35 +484,36 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           </>
         )}
       </div>
-
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 className="section-title">Шаги конвертации</h4>
-        {steps.length === 0 ? (
-          <small>Шаги появятся после расчёта.</small>
-        ) : (
-          <div className="table-wrap" style={{ marginTop: 8 }}>
-            <table className="compact-table">
-              <thead>
-                <tr>
-                  <th>Тип</th>
-                  <th>Описание</th>
-                  <th>Из</th>
-                  <th>В</th>
-                </tr>
-              </thead>
-              <tbody>
-                {steps.map((s, i) => (
-                  <tr key={i}>
-                    <td>{s.kind ?? "-"}</td>
-                    <td>{s.description ?? "-"}</td>
-                    <td>{String(s.from_qty ?? "-")} {up(s.from_uom ?? "")}</td>
-                    <td>{String(s.to_qty ?? "-")} {up(s.to_uom ?? "")}</td>
+        <details className="calc-steps-spoiler">
+          <summary>Шаги конвертации</summary>
+          {steps.length === 0 ? (
+            <small>Шаги появятся после расчёта.</small>
+          ) : (
+            <div className="table-wrap" style={{ marginTop: 8 }}>
+              <table className="compact-table">
+                <thead>
+                  <tr>
+                    <th>Тип</th>
+                    <th>Описание</th>
+                    <th>Из</th>
+                    <th>В</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {steps.map((s, i) => (
+                    <tr key={i}>
+                      <td>{s.kind ?? "-"}</td>
+                      <td>{s.description ?? "-"}</td>
+                      <td>{String(s.from_qty ?? "-")} {up(s.from_uom ?? "")}</td>
+                      <td>{String(s.to_qty ?? "-")} {up(s.to_uom ?? "")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </details>
       </div>
     </div>
   );

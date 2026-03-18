@@ -419,6 +419,96 @@ small { color: var(--muted); }
   font-size: 13px;
 }
 
+.calculator-page {
+  padding: 8px;
+}
+
+.calculator-page .page-header {
+  margin-bottom: 2px;
+}
+
+.calculator-page .card {
+  padding: 8px;
+}
+
+.calculator-page .row {
+  gap: 8px;
+}
+
+.calculator-page .field {
+  gap: 3px;
+}
+
+.calculator-page .field > small {
+  font-size: 11px;
+}
+
+.calculator-page .field input,
+.calculator-page .field select,
+.calculator-page .item-lookup-input-wrap input {
+  min-height: 32px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.calculator-page .btn {
+  padding: 6px 9px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+.calculator-controls-row,
+.calculator-actions-row {
+  margin-top: 8px;
+}
+
+.calculator-categories {
+  margin-top: 8px;
+}
+
+.calculator-result-card {
+  border-color: var(--primary);
+  background: linear-gradient(180deg, var(--surface), var(--surface-2));
+}
+
+.calculator-result-main {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.calculator-result-badge {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-color: var(--primary);
+  background: rgba(37, 99, 235, 0.14);
+}
+
+.calc-steps-spoiler > summary {
+  cursor: pointer;
+  font-weight: 600;
+  user-select: none;
+}
+
+.calc-steps-spoiler > summary::after {
+  content: "▸";
+  margin-left: 8px;
+  color: var(--muted);
+}
+
+.calc-steps-spoiler[open] > summary::after {
+  content: "▾";
+}
+
+.calc-steps-spoiler > small {
+  display: block;
+  margin-top: 8px;
+}
+
 @media (max-width: 720px) {
   .modal-grid {
     grid-template-columns: 1fr;
