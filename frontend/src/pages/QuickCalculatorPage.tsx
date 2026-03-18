@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, requestJson } from "../api/request";
 import PageHeader from "../components/PageHeader";
@@ -228,12 +228,16 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     if (defaultTargetUom) setToUom(defaultTargetUom);
     if (defaultFromUom) setFromUom(defaultFromUom);
 
+    resetOutput();
+  }, [itemId, selectedItem, defaultTargetUom, defaultFromUom]);
+
+  function resetOutput() {
     setResultQtyRaw("");
     setResultUom("");
     setSteps([]);
     setWarnings([]);
     setSuggestedRuleUrl(null);
-  }, [itemId, selectedItem, defaultTargetUom, defaultFromUom]);
+  }
 
   function applyDefaultTarget() {
     if (defaultTargetUom) setToUom(defaultTargetUom);
@@ -247,28 +251,24 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   async function calculate() {
     setSuggestedRuleUrl(null);
     if (!itemId) {
-      setErr("Р’С‹Р±РµСЂРёС‚Рµ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂСѓ.");
+      setErr("Выберите номенклатуру.");
       return;
     }
     if (!fromUom || !toUom) {
-      setErr("РЈРєР°Р¶РёС‚Рµ РІС…РѕРґСЏС‰СѓСЋ Рё РёС‚РѕРіРѕРІСѓСЋ Р•Р.");
+      setErr("Укажите входящую и итоговую ЕИ.");
       return;
     }
 
     const qtyText = normalizeQty(qty);
     const qtyNum = Number(qtyText);
     if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-      setErr("РљРѕР»РёС‡РµСЃС‚РІРѕ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ Р±РѕР»СЊС€Рµ 0.");
+      setErr("Количество должно быть больше 0.");
       return;
     }
 
     setErr(null);
     setCalculating(true);
-    setResultQtyRaw("");
-    setResultUom("");
-    setSteps([]);
-    setWarnings([]);
-    setSuggestedRuleUrl(null);
+    resetOutput();
 
     try {
       const res = await requestJson<any>({
@@ -288,7 +288,6 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       setResultUom(up(res?.to?.uom ?? toUom));
       setSteps(Array.isArray(res?.steps) ? res.steps : []);
       setWarnings(Array.isArray(res?.warnings) ? res.warnings : []);
-      setSuggestedRuleUrl(null);
     } catch (e: any) {
       const parsed = parseConvertError(e);
       if (parsed && selectedItem) {
@@ -297,7 +296,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           fromCode: fromUom,
           toCode: toUom,
         });
-        let detailText = parsed.message ?? "РќРµС‚ РїРѕРґС…РѕРґСЏС‰РµРіРѕ РїСЂР°РІРёР»Р° РґР»СЏ РїРµСЂРµРІРѕРґР°.";
+        let detailText = parsed.message ?? "Нет подходящего правила для перевода.";
 
         if (parsed.suggestedSteps.length > 0) {
           const first = parsed.suggestedSteps[0];
@@ -321,13 +320,13 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               return `${num}) ${pair}, ${rule}${param}`;
             })
             .join("; ");
-          detailText = `${detailText} РЁР°РіРё: ${stepsText}`;
+          detailText = `${detailText} Шаги: ${stepsText}`;
         }
 
         setSuggestedRuleUrl(suggestedUrl);
         setErr(detailText);
       } else if (parsed) {
-        setErr(parsed.message ?? "РќРµС‚ РїРѕРґС…РѕРґСЏС‰РµРіРѕ РїСЂР°РІРёР»Р° РґР»СЏ РїРµСЂРµРІРѕРґР°.");
+        setErr(parsed.message ?? "Нет подходящего правила для перевода.");
       } else if (e instanceof ApiError) {
         try {
           const parsedBody = JSON.parse(e.bodyText);
@@ -346,8 +345,8 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   return (
     <div className="card">
       <PageHeader
-        title="РљР°Р»СЊРєСѓР»СЏС‚РѕСЂ РєРѕРЅРІРµСЂС‚Р°С†РёРё"
-        subtitle="Р‘С‹СЃС‚СЂС‹Р№ СЂР°СЃС‡С‘С‚ Р±РµР· СЃРѕР·РґР°РЅРёСЏ РЅР°РєР»Р°РґРЅРѕР№: РІС‹Р±РµСЂРёС‚Рµ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂСѓ, Р•Р Рё РєРѕР»РёС‡РµСЃС‚РІРѕ."
+        title="Калькулятор конвертации"
+        subtitle="Быстрый расчёт без создания накладной: выберите номенклатуру, ЕИ и количество."
         right={
           <button
             className="btn"
@@ -359,7 +358,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               nav("/");
             }}
           >
-            {props.publicMode ? "Р’РѕР№С‚Рё РІ СЃРёСЃС‚РµРјСѓ" : "Рљ РЅР°РєР»Р°РґРЅС‹Рј"}
+            {props.publicMode ? "Войти в систему" : "К накладным"}
           </button>
         }
       />
@@ -370,13 +369,13 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           {suggestedRuleUrl && !props.publicMode && (
             <div style={{ marginTop: 8 }}>
               <button className="btn btn-tight" onClick={() => nav(suggestedRuleUrl)}>
-                РЎРѕР·РґР°С‚СЊ РїСЂР°РІРёР»Рѕ
+                Создать правило
               </button>
             </div>
           )}
           {suggestedRuleUrl && props.publicMode && (
             <div style={{ marginTop: 8 }}>
-              <small>Р”Р»СЏ СЃРѕР·РґР°РЅРёСЏ РїСЂР°РІРёР»Р° РІРѕР№РґРёС‚Рµ РІ СЃРёСЃС‚РµРјСѓ.</small>
+              <small>Для создания правила войдите в систему.</small>
             </div>
           )}
         </div>
@@ -385,19 +384,19 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row">
           <label style={{ flex: 1, minWidth: 320 }}>
-            <small>РќРѕРјРµРЅРєР»Р°С‚СѓСЂР°</small><br />
+            <small>Номенклатура</small><br />
             <select value={itemId ?? ""} onChange={(e) => setItemId(toNum(e.target.value))} style={{ width: "100%" }}>
               {items.map((it: any) => <option key={it.id} value={it.id}>{it.name}</option>)}
             </select>
           </label>
           <label>
-            <small>Р’С…РѕРґСЏС‰Р°СЏ Р•Р</small><br />
+            <small>Входящая ЕИ</small><br />
             <select value={fromUom} onChange={(e) => setFromUom(up(e.target.value))}>
               {uoms.map((u: any) => <option key={u.id} value={up(u.code)}>{up(u.code)} ({up(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
             </select>
           </label>
           <label>
-            <small>РС‚РѕРіРѕРІР°СЏ Р•Р</small><br />
+            <small>Итоговая ЕИ</small><br />
             <select value={toUom} onChange={(e) => setToUom(up(e.target.value))}>
               {uoms.map((u: any) => <option key={u.id} value={up(u.code)}>{up(u.code)} ({up(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
             </select>
@@ -406,20 +405,20 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
 
         <div className="row" style={{ marginTop: 10 }}>
           <label>
-            <small>РљРѕР»РёС‡РµСЃС‚РІРѕ</small><br />
+            <small>Количество</small><br />
             <input value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 140 }} />
           </label>
 
           <label>
-            <small>РћРєСЂСѓРіР»РµРЅРёРµ</small><br />
+            <small>Округление</small><br />
             <select value={roundMode} onChange={(e) => setRoundMode(e.target.value as "item" | "custom")}>
-              <option value="item">РџРѕ С‚РѕС‡РЅРѕСЃС‚Рё РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹</option>
-              <option value="custom">РџРѕР»СЊР·РѕРІР°С‚РµР»СЊСЃРєР°СЏ С‚РѕС‡РЅРѕСЃС‚СЊ</option>
+              <option value="item">По точности номенклатуры</option>
+              <option value="custom">Пользовательская точность</option>
             </select>
           </label>
 
           <label>
-            <small>Р—РЅР°РєРѕРІ РїРѕСЃР»Рµ Р·Р°РїСЏС‚РѕР№</small><br />
+            <small>Знаков после запятой</small><br />
             <input
               type="number"
               min={0}
@@ -433,22 +432,22 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
 
           <div style={{ flex: 1 }} />
 
-          <button className="btn" onClick={swapUoms}>РџРѕРјРµРЅСЏС‚СЊ Р•Р</button>
-          <button className="btn" onClick={applyDefaultTarget}>Р•Р РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</button>
+          <button className="btn" onClick={swapUoms}>Поменять ЕИ</button>
+          <button className="btn" onClick={applyDefaultTarget}>ЕИ по умолчанию</button>
           <button className="btn primary" onClick={calculate} disabled={calculating}>
-            {calculating ? "РЎС‡РёС‚Р°РµРј..." : "Р Р°СЃСЃС‡РёС‚Р°С‚СЊ"}
+            {calculating ? "Считаем..." : "Рассчитать"}
           </button>
         </div>
 
         <div style={{ marginTop: 10 }}>
-          <small>РљР°С‚РµРіРѕСЂРёРё: {fromCatCode} {"->"} {toCatCode}</small>
+          <small>Категории: {fromCatCode} {"->"} {toCatCode}</small>
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Р РµР·СѓР»СЊС‚Р°С‚</h4>
+        <h4 style={{ marginTop: 0 }}>Результат</h4>
         {!resultQtyRaw ? (
-          <small>Р’С‹РїРѕР»РЅРёС‚Рµ СЂР°СЃС‡С‘С‚, С‡С‚РѕР±С‹ СѓРІРёРґРµС‚СЊ СЂРµР·СѓР»СЊС‚Р°С‚.</small>
+          <small>Выполните расчёт, чтобы увидеть результат.</small>
         ) : (
           <>
             <div className="row">
@@ -456,7 +455,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
                 {normalizeQty(qty)} {up(fromUom)} {"->"} {roundedQty} {resultUom}
               </span>
               {roundMode === "custom" && (
-                <small>РћРєСЂСѓРіР»РµРЅРѕ РґРѕ {roundPrecision} Р·РЅ.</small>
+                <small>Округлено до {roundPrecision} зн.</small>
               )}
             </div>
 
@@ -472,17 +471,17 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>РЁР°РіРё РєРѕРЅРІРµСЂС‚Р°С†РёРё</h4>
+        <h4 style={{ marginTop: 0 }}>Шаги конвертации</h4>
         {steps.length === 0 ? (
-          <small>РЁР°РіРё РїРѕСЏРІСЏС‚СЃСЏ РїРѕСЃР»Рµ СЂР°СЃС‡С‘С‚Р°.</small>
+          <small>Шаги появятся после расчёта.</small>
         ) : (
           <table className="compact-table">
             <thead>
               <tr>
-                <th>РўРёРї</th>
-                <th>РћРїРёСЃР°РЅРёРµ</th>
-                <th>РР·</th>
-                <th>Р’</th>
+                <th>Тип</th>
+                <th>Описание</th>
+                <th>Из</th>
+                <th>В</th>
               </tr>
             </thead>
             <tbody>
