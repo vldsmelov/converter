@@ -161,8 +161,8 @@ export default function InvoiceDetailPage() {
         }
       />
 
-      {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
-      {!inv ? <div style={{ padding: 8 }}>Загрузка...</div> : null}
+      {err && <div className="error-banner">{err}</div>}
+      {!inv ? <div style={{ padding: 8 }}><small>Загрузка...</small></div> : null}
 
       {inv ? (
         <div className="card" style={{ marginTop: 12 }}>
@@ -197,13 +197,13 @@ export default function InvoiceDetailPage() {
 
       {inv?.error ? (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ marginTop: 0 }}>Ошибка</h4>
+          <h4 className="section-title">Ошибка</h4>
           <div style={{ color: "#fca5a5" }}>{inv.error}</div>
         </div>
       ) : null}
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Действия</h4>
+        <h4 className="section-title">Действия</h4>
         <div className="row">
           <button className="btn primary" onClick={calculate} disabled={!canCalculate || busy !== ""}>
             {busy === "calculate" ? "Считаю..." : "Рассчитать"}
@@ -212,13 +212,13 @@ export default function InvoiceDetailPage() {
             {busy === "generate" ? "Генерирую..." : "Сгенерировать XLSX/PDF"}
           </button>
           <div style={{ flex: 1 }} />
-          <span className="badge">new → calculating → calculated → generating → generated</span>
+          <small>Статусы: new → calculating → calculated → generating → generated</small>
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Таблица строк</h4>
-        <div style={{ overflowX: "auto" }}>
+        <h4 className="section-title">Таблица строк</h4>
+        <div className="table-wrap" style={{ marginTop: 8 }}>
           <table className="compact-table invoice-table">
             <thead>
               <tr>
@@ -238,6 +238,8 @@ export default function InvoiceDetailPage() {
                 const name = it?.name ?? `item_id=${l.item_id}`;
                 const conv = l.converted;
                 const rowStatus = conv ? "ok" : (status === "failed" ? "failed" : "-");
+                const rowStatusClass =
+                  rowStatus === "ok" ? "status-ok" : rowStatus === "failed" ? "status-bad" : "";
                 const note = conv
                   ? `Шагов: ${Array.isArray(conv.steps) ? conv.steps.length : 0}`
                   : (status === "failed" ? "Проверьте правила конвертации" : "");
@@ -250,23 +252,23 @@ export default function InvoiceDetailPage() {
                     <td>{l.uom_code}</td>
                     <td className="num">{conv ? fmtQty(conv.posting_qty, 6) : "-"}</td>
                     <td>{conv?.posting_uom_code ?? "-"}</td>
-                    <td><span className="badge">{rowStatus}</span></td>
+                    <td><span className={`badge ${rowStatusClass}`.trim()}>{rowStatus}</span></td>
                     <td className="note-cell"><small>{note}</small></td>
                   </tr>
                 );
               })}
-              {lines.length === 0 && <tr><td colSpan={8}><small>Строк нет.</small></td></tr>}
+              {lines.length === 0 && <tr><td colSpan={8} className="empty-row"><small>Строк нет.</small></td></tr>}
             </tbody>
           </table>
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Файлы</h4>
+        <h4 className="section-title">Файлы</h4>
         {files.length === 0 ? (
           <small>Файлов пока нет. Нажми «Сгенерировать XLSX/PDF» после расчёта.</small>
         ) : (
-          <div style={{ overflowX: "auto" }}>
+          <div className="table-wrap" style={{ marginTop: 8 }}>
             <table className="compact-table">
               <thead>
                 <tr><th>Тип</th><th>Файл</th><th className="num">Размер</th><th>Создан</th><th></th></tr>

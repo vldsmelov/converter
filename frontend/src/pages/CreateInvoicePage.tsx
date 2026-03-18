@@ -589,20 +589,20 @@ export default function CreateInvoicePage() {
         right={<button className="btn" onClick={() => nav("/")}>Отмена</button>}
       />
 
-      {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
+      {err && <div className="error-banner">{err}</div>}
 
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row">
-          <label>
-            <small>Номер</small><br />
+          <label className="field">
+            <small>Номер</small>
             <input value={number} onChange={(e) => setNumber(e.target.value)} />
           </label>
-          <label>
-            <small>Поставщик</small><br />
+          <label className="field">
+            <small>Поставщик</small>
             <input value={supplier} onChange={(e) => setSupplier(e.target.value)} />
           </label>
-          <label>
-            <small>Дата</small><br />
+          <label className="field">
+            <small>Дата</small>
             <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} />
           </label>
           <div style={{ flex: 1 }} />
@@ -611,87 +611,91 @@ export default function CreateInvoicePage() {
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <h4 style={{ margin: 0 }}>Табличная часть</h4>
+        <div className="row section-header">
+          <h4 className="section-title">Табличная часть</h4>
           <button className="btn" onClick={startAddLine}>+ Добавить номенклатуру</button>
         </div>
 
-        <table className="compact-table invoice-entry-table" style={{ marginTop: 8 }}>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Номенклатура</th>
-              <th>Кол-во</th>
-              <th>ЕИ</th>
-              <th>Штрихкод</th>
-              <th>Код поставщика</th>
-              <th>Проверка</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((l, idx) => {
-              const ch = checks[l.key];
-              const it = items.find((x: any) => x.id === l.item_id);
-              return (
-                <tr key={l.key}>
-                  <td>{idx + 1}</td>
-                  <td>
-                    <div>{it?.name ?? "-"}</div>
-                    <small>
-                      {catName(it?.category)} | хранение: {itemPostingUomCode(it) ?? "-"}
-                    </small>
-                  </td>
-                  <td className="num">{l.qty}</td>
-                  <td>{l.uom_code}</td>
-                  <td>{l.barcode || "-"}</td>
-                  <td>{l.supplier_code || "-"}</td>
-                  <td>
-                    {!ch || ch.state === "checking" || ch.state === "idle" ? (
-                      <small>Проверяю...</small>
-                    ) : ch.state === "ok" ? (
-                      <div>
-                        <span className="badge">OK</span>
-                        {ch.message ? <div><small>{ch.message}</small></div> : null}
-                      </div>
-                    ) : ch.state === "mismatch" ? (
-                      <div>
-                        <div className="row" style={{ gap: 8, justifyContent: "flex-start" }}>
-                          <span className="badge">не совпадает ЕИ</span>
-                          {ch.suggestedUrl ? (
-                            <button className="btn btn-tight" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
-                          ) : null}
+        <div className="table-wrap" style={{ marginTop: 8 }}>
+          <table className="compact-table invoice-entry-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Номенклатура</th>
+                <th>Кол-во</th>
+                <th>ЕИ</th>
+                <th>Штрихкод</th>
+                <th>Код поставщика</th>
+                <th>Проверка</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, idx) => {
+                const ch = checks[l.key];
+                const it = items.find((x: any) => x.id === l.item_id);
+                return (
+                  <tr key={l.key}>
+                    <td>{idx + 1}</td>
+                    <td>
+                      <div>{it?.name ?? "-"}</div>
+                      <small>
+                        {catName(it?.category)} | хранение: {itemPostingUomCode(it) ?? "-"}
+                      </small>
+                    </td>
+                    <td className="num">{l.qty}</td>
+                    <td>{l.uom_code}</td>
+                    <td>{l.barcode || "-"}</td>
+                    <td>{l.supplier_code || "-"}</td>
+                    <td>
+                      {!ch || ch.state === "checking" || ch.state === "idle" ? (
+                        <small>Проверяю...</small>
+                      ) : ch.state === "ok" ? (
+                        <div>
+                          <span className="badge status-ok">OK</span>
+                          {ch.message ? <div><small>{ch.message}</small></div> : null}
                         </div>
-                        {ch.message ? <div><small>{ch.message}</small></div> : null}
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="row" style={{ gap: 8, justifyContent: "flex-start" }}>
-                          <span className="badge">нет правила</span>
-                          {ch.suggestedUrl ? (
-                            <button className="btn btn-tight" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
-                          ) : null}
+                      ) : ch.state === "mismatch" ? (
+                        <div>
+                          <div className="row" style={{ gap: 8, justifyContent: "flex-start" }}>
+                            <span className="badge status-warn">не совпадает ЕИ</span>
+                            {ch.suggestedUrl ? (
+                              <button className="btn btn-tight" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
+                            ) : null}
+                          </div>
+                          {ch.message ? <div><small>{ch.message}</small></div> : null}
                         </div>
-                        {ch.message ? <div><small>{ch.message}</small></div> : null}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    <button className="btn btn-tight" onClick={() => startEditLine(idx)} style={{ marginRight: 6 }}>Изменить</button>
-                    <button className="btn btn-tight" onClick={() => removeLine(idx)}>Удалить</button>
-                  </td>
-                </tr>
-              );
-            })}
-            {lines.length === 0 ? (
-              <tr><td colSpan={8}><small>Пока нет строк. Добавьте номенклатурную позицию.</small></td></tr>
-            ) : null}
-          </tbody>
-        </table>
+                      ) : (
+                        <div>
+                          <div className="row" style={{ gap: 8, justifyContent: "flex-start" }}>
+                            <span className="badge status-bad">нет правила</span>
+                            {ch.suggestedUrl ? (
+                              <button className="btn btn-tight" onClick={() => ch.suggestedUrl && nav(ch.suggestedUrl)}>Создать правило</button>
+                            ) : null}
+                          </div>
+                          {ch.message ? <div><small>{ch.message}</small></div> : null}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                      <button className="btn btn-tight" onClick={() => startEditLine(idx)} style={{ marginRight: 6 }}>Изменить</button>
+                      <button className="btn btn-tight" onClick={() => removeLine(idx)}>Удалить</button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {lines.length === 0 ? (
+                <tr><td colSpan={8} className="empty-row"><small>Пока нет строк. Добавьте номенклатурную позицию.</small></td></tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
 
         <div style={{ marginTop: 10 }}>
-          <small>Подсказка по первой строке:</small><br />
+          <small>Подсказка по первой строке:</small>
+          <div style={{ marginTop: 4 }}>
           <span className="badge">{exampleRow.name} - {exampleRow.cat} → хранение: {exampleRow.posting}</span>
+          </div>
         </div>
 
         <div className="row" style={{ marginTop: 12 }}>
@@ -711,9 +715,9 @@ export default function CreateInvoicePage() {
             </div>
 
             <div className="modal-grid">
-              <label style={{ gridColumn: "1 / -1" }}>
-                <small>Номенклатура</small><br />
-                <select value={editor.item_id ?? ""} onChange={(e) => onEditorItemChange(Number(e.target.value))} style={{ width: "100%" }}>
+              <label className="field" style={{ gridColumn: "1 / -1" }}>
+                <small>Номенклатура</small>
+                <select value={editor.item_id ?? ""} onChange={(e) => onEditorItemChange(Number(e.target.value))}>
                   {items.map((it: any) => (
                     <option key={it.id} value={it.id}>
                       {it.name} - {catName(it.category)} (хранение: {itemPostingUomCode(it) ?? "-"})
@@ -722,35 +726,35 @@ export default function CreateInvoicePage() {
                 </select>
               </label>
 
-              <label>
-                <small>Количество</small><br />
+              <label className="field">
+                <small>Количество</small>
                 <input value={editor.qty} onChange={(e) => setEditor((v) => ({ ...v, qty: e.target.value }))} />
               </label>
 
-              <label>
-                <small>ЕИ документа</small><br />
+              <label className="field">
+                <small>ЕИ документа</small>
                 <select value={editor.uom_code} onChange={(e) => setEditor((v) => ({ ...v, uom_code: e.target.value }))}>
                   {uomOptions.map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </label>
 
-              <label>
-                <small>Штрихкод</small><br />
+              <label className="field">
+                <small>Штрихкод</small>
                 <input value={editor.barcode} onChange={(e) => setEditor((v) => ({ ...v, barcode: e.target.value }))} />
               </label>
 
-              <label>
-                <small>Код поставщика</small><br />
+              <label className="field">
+                <small>Код поставщика</small>
                 <input value={editor.supplier_code} onChange={(e) => setEditor((v) => ({ ...v, supplier_code: e.target.value }))} />
               </label>
 
-              <label style={{ gridColumn: "1 / -1" }}>
-                <small>Комментарий (доп. реквизит)</small><br />
-                <input value={editor.note} onChange={(e) => setEditor((v) => ({ ...v, note: e.target.value }))} style={{ width: "100%" }} />
+              <label className="field" style={{ gridColumn: "1 / -1" }}>
+                <small>Комментарий (доп. реквизит)</small>
+                <input value={editor.note} onChange={(e) => setEditor((v) => ({ ...v, note: e.target.value }))} />
               </label>
 
-              <label>
-                <small>Код доп. поля</small><br />
+              <label className="field">
+                <small>Код доп. поля</small>
                 <input
                   value={editor.custom_field_code}
                   onChange={(e) => setEditor((v) => ({ ...v, custom_field_code: e.target.value }))}
@@ -758,8 +762,8 @@ export default function CreateInvoicePage() {
                 />
               </label>
 
-              <label>
-                <small>Название доп. поля</small><br />
+              <label className="field">
+                <small>Название доп. поля</small>
                 <input
                   value={editor.custom_field_label}
                   onChange={(e) => setEditor((v) => ({ ...v, custom_field_label: e.target.value }))}
@@ -767,12 +771,11 @@ export default function CreateInvoicePage() {
                 />
               </label>
 
-              <label style={{ gridColumn: "1 / -1" }}>
-                <small>Значение доп. поля</small><br />
+              <label className="field" style={{ gridColumn: "1 / -1" }}>
+                <small>Значение доп. поля</small>
                 <input
                   value={editor.custom_field_value}
                   onChange={(e) => setEditor((v) => ({ ...v, custom_field_value: e.target.value }))}
-                  style={{ width: "100%" }}
                 />
               </label>
 

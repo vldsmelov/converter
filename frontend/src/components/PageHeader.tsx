@@ -6,12 +6,12 @@ export default function PageHeader(props: {
   right?: React.ReactNode;
 }) {
   return (
-    <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-end" }}>
+    <div className="row page-header">
       <div>
-        <h3 style={{ margin: 0 }}>{props.title}</h3>
-        {props.subtitle ? <small>{props.subtitle}</small> : null}
+        <h3 className="page-header-title">{props.title}</h3>
+        {props.subtitle ? <small className="page-header-subtitle">{props.subtitle}</small> : null}
       </div>
-      <div className="row" style={{ gap: 8 }}>{props.right}</div>
+      <div className="row page-header-actions">{props.right}</div>
     </div>
   );
 }

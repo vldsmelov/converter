@@ -115,35 +115,34 @@ export default function InvoicesPage() {
         }
       />
 
-      {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
+      {err && <div className="error-banner">{err}</div>}
 
       <div className="card invoice-filters" style={{ marginTop: 10 }}>
         <div className="row">
-          <label style={{ flex: 1, minWidth: 260 }}>
-            <small>Поиск (номер / поставщик)</small><br />
+          <label className="field" style={{ flex: 1, minWidth: 260 }}>
+            <small>Поиск (номер / поставщик)</small>
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              style={{ width: "100%" }}
               placeholder="например: INV-TEST"
             />
           </label>
 
-          <label>
-            <small>Статус</small><br />
+          <label className="field">
+            <small>Статус</small>
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
               <option value="all">Все</option>
               {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </label>
 
-          <label>
-            <small>Дата с</small><br />
+          <label className="field">
+            <small>Дата с</small>
             <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
           </label>
 
-          <label>
-            <small>Дата по</small><br />
+          <label className="field">
+            <small>Дата по</small>
             <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </label>
         </div>
@@ -191,7 +190,7 @@ export default function InvoicesPage() {
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={7}><small>По текущему фильтру записей нет.</small></td></tr>
+              <tr><td colSpan={7} className="empty-row"><small>По текущему фильтру записей нет.</small></td></tr>
             )}
           </tbody>
         </table>

@@ -364,7 +364,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       />
 
       {err && (
-        <div style={{ marginTop: 10, color: "#fca5a5" }}>
+        <div className="error-banner">
           {err}
           {suggestedRuleUrl && !props.publicMode && (
             <div style={{ marginTop: 8 }}>
@@ -383,20 +383,20 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
 
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row">
-          <label style={{ flex: 1, minWidth: 320 }}>
-            <small>Номенклатура</small><br />
-            <select value={itemId ?? ""} onChange={(e) => setItemId(toNum(e.target.value))} style={{ width: "100%" }}>
+          <label className="field" style={{ flex: 1, minWidth: 320 }}>
+            <small>Номенклатура</small>
+            <select value={itemId ?? ""} onChange={(e) => setItemId(toNum(e.target.value))}>
               {items.map((it: any) => <option key={it.id} value={it.id}>{it.name}</option>)}
             </select>
           </label>
-          <label>
-            <small>Входящая ЕИ</small><br />
+          <label className="field">
+            <small>Входящая ЕИ</small>
             <select value={fromUom} onChange={(e) => setFromUom(up(e.target.value))}>
               {uoms.map((u: any) => <option key={u.id} value={up(u.code)}>{up(u.code)} ({up(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
             </select>
           </label>
-          <label>
-            <small>Итоговая ЕИ</small><br />
+          <label className="field">
+            <small>Итоговая ЕИ</small>
             <select value={toUom} onChange={(e) => setToUom(up(e.target.value))}>
               {uoms.map((u: any) => <option key={u.id} value={up(u.code)}>{up(u.code)} ({up(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
             </select>
@@ -404,21 +404,21 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
         </div>
 
         <div className="row" style={{ marginTop: 10 }}>
-          <label>
-            <small>Количество</small><br />
+          <label className="field">
+            <small>Количество</small>
             <input value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 140 }} />
           </label>
 
-          <label>
-            <small>Округление</small><br />
+          <label className="field">
+            <small>Округление</small>
             <select value={roundMode} onChange={(e) => setRoundMode(e.target.value as "item" | "custom")}>
               <option value="item">По точности номенклатуры</option>
               <option value="custom">Пользовательская точность</option>
             </select>
           </label>
 
-          <label>
-            <small>Знаков после запятой</small><br />
+          <label className="field">
+            <small>Знаков после запятой</small>
             <input
               type="number"
               min={0}
@@ -445,7 +445,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Результат</h4>
+        <h4 className="section-title">Результат</h4>
         {!resultQtyRaw ? (
           <small>Выполните расчёт, чтобы увидеть результат.</small>
         ) : (
@@ -471,30 +471,32 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Шаги конвертации</h4>
+        <h4 className="section-title">Шаги конвертации</h4>
         {steps.length === 0 ? (
           <small>Шаги появятся после расчёта.</small>
         ) : (
-          <table className="compact-table">
-            <thead>
-              <tr>
-                <th>Тип</th>
-                <th>Описание</th>
-                <th>Из</th>
-                <th>В</th>
-              </tr>
-            </thead>
-            <tbody>
-              {steps.map((s, i) => (
-                <tr key={i}>
-                  <td>{s.kind ?? "-"}</td>
-                  <td>{s.description ?? "-"}</td>
-                  <td>{String(s.from_qty ?? "-")} {up(s.from_uom ?? "")}</td>
-                  <td>{String(s.to_qty ?? "-")} {up(s.to_uom ?? "")}</td>
+          <div className="table-wrap" style={{ marginTop: 8 }}>
+            <table className="compact-table">
+              <thead>
+                <tr>
+                  <th>Тип</th>
+                  <th>Описание</th>
+                  <th>Из</th>
+                  <th>В</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {steps.map((s, i) => (
+                  <tr key={i}>
+                    <td>{s.kind ?? "-"}</td>
+                    <td>{s.description ?? "-"}</td>
+                    <td>{String(s.from_qty ?? "-")} {up(s.from_uom ?? "")}</td>
+                    <td>{String(s.to_qty ?? "-")} {up(s.to_uom ?? "")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>
