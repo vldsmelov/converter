@@ -34,6 +34,7 @@ class UoMCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UoMCategorySerializer
     permission_classes = [RoleByMethodPermission]
     read_role = "nsi.uom.read"
+    allow_anonymous_read = True
 
 
 class UoMViewSet(viewsets.ModelViewSet):
@@ -42,6 +43,7 @@ class UoMViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleByMethodPermission]
     read_role = "nsi.uom.read"
     write_role = "nsi.uom.write"
+    allow_anonymous_read = True
 
 
 
@@ -82,6 +84,7 @@ class ItemViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleByMethodPermission]
     read_role = "nsi.item.read"
     write_role = "nsi.item.write"
+    allow_anonymous_read = True
 
 
 class ConversionRuleViewSet(viewsets.ModelViewSet):
@@ -129,6 +132,7 @@ class MatchRuleView(APIView):
     """
 
     permission_classes = [RoleByMethodPermission]
+    allow_anonymous = True
     read_role = "nsi.rule.read"  # считаем match как read
 
     def post(self, request):

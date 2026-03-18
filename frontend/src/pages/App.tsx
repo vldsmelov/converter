@@ -19,9 +19,10 @@ import NsiPackageEditPage from "./NsiPackageEditPage";
 import NsiRulesPage from "./NsiRulesPage";
 import NsiRulesWizardPage from "./NsiRulesWizardPage";
 import AdminConsolePage from "./AdminConsolePage";
+import QuickCalculatorPage from "./QuickCalculatorPage";
 
 export default function App() {
-  const { keycloak } = useAuth();
+  const { keycloak, token } = useAuth();
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const stored = window.localStorage.getItem("ui_theme");
     if (stored === "dark" || stored === "light") return stored;
@@ -48,6 +49,7 @@ export default function App() {
           <h2 style={{ margin: 0 }}>{"\u041a\u043e\u043d\u0432\u0435\u0440\u0442\u0435\u0440"}</h2>
           <Link to="/">{"\u041d\u0430\u043a\u043b\u0430\u0434\u043d\u044b\u0435"}</Link>
           <Link to="/create">{"\u0421\u043e\u0437\u0434\u0430\u0442\u044c"}</Link>
+          <Link to="/calculator">{"\u041a\u0430\u043b\u044c\u043a\u0443\u043b\u044f\u0442\u043e\u0440"}</Link>
           <span className="badge">{"\u041d\u0421\u0418"}</span>
           <Link to="/nsi/uoms">{"\u0415\u0418"}</Link>
           <Link to="/nsi/item-categories">{"\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u0438"}</Link>
@@ -92,6 +94,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<InvoicesPage />} />
           <Route path="/create" element={<CreateInvoicePage />} />
+          <Route path="/calculator" element={<QuickCalculatorPage token={token} />} />
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
 
           <Route path="/nsi/uoms" element={<NsiUomsPage />} />

@@ -14,6 +14,7 @@ getcontext().prec = 28
 
 app = FastAPI(title="conversion-service")
 bearer = HTTPBearer(auto_error=True)
+optional_bearer = HTTPBearer(auto_error=False)
 
 JWKS_URL = os.environ["KEYCLOAK_JWKS_URL"]
 
@@ -155,7 +156,8 @@ def require_role(role: str):
 
 async def nsi_get(client: httpx.AsyncClient, token: str, path: str) -> Any:
     url = f"{NSI_BASE_URL}{path}"
-    r = await client.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    r = await client.get(url, headers=headers, timeout=10)
     if r.status_code == 401:
         raise HTTPException(status_code=502, detail="NSI auth failed (token rejected by NSI)")
     if r.status_code == 403:
@@ -165,7 +167,8 @@ async def nsi_get(client: httpx.AsyncClient, token: str, path: str) -> Any:
 
 async def nsi_post(client: httpx.AsyncClient, token: str, path: str, payload: dict) -> Any:
     url = f"{NSI_BASE_URL}{path}"
-    r = await client.post(url, json=payload, headers={"Authorization": f"Bearer {token}"}, timeout=10)
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    r = await client.post(url, json=payload, headers=headers, timeout=10)
     if r.status_code == 401:
         raise HTTPException(status_code=502, detail="NSI auth failed (token rejected by NSI)")
     if r.status_code == 403:
@@ -436,10 +439,9 @@ def secure_ping(_claims: dict = Depends(require_role("conversion.ping"))):
 @app.post("/api/v1/convert", response_model=ConvertResponse)
 async def convert(
     req: ConvertRequest,
-    creds: HTTPAuthorizationCredentials = Depends(bearer),
-    claims: dict = Depends(require_role("conversion.convert")),
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(optional_bearer),
 ):
-    bearer_token = creds.credentials
+    bearer_token = creds.credentials if creds else ""
     on_date = req.on_date or date.today()
 
     async with httpx.AsyncClient() as client:
