@@ -57,11 +57,41 @@ def get_uom_cats(token: str):
     return r.json()
 
 
+def ensure_uom(token: str, code: str, name: str, category_id: int, factor_to_base: str, precision: int) -> int:
+    r = httpx.get(f"{NSI_URL}/api/v1/uoms/", headers=auth(token), timeout=20)
+    r.raise_for_status()
+    for u in r.json():
+        if u.get("code") == code:
+            return u["id"]
+    rr = httpx.post(
+        f"{NSI_URL}/api/v1/uoms/",
+        headers={**auth(token), "Content-Type": "application/json"},
+        json={
+            "code": code,
+            "name": name,
+            "category": category_id,
+            "factor_to_base": factor_to_base,
+            "precision": precision,
+        },
+        timeout=20,
+    )
+    rr.raise_for_status()
+    return rr.json()["id"]
+
+
 def ensure_item_category(token: str, name: str, default_uom_id: int) -> int:
     r = httpx.get(f"{NSI_URL}/api/v1/item-categories/", headers=auth(token), timeout=20)
     r.raise_for_status()
     for c in r.json():
         if c.get("name") == name:
+            current_default_uom = c.get("default_uom")
+            if current_default_uom != default_uom_id:
+                httpx.patch(
+                    f"{NSI_URL}/api/v1/item-categories/{c['id']}/",
+                    headers={**auth(token), "Content-Type": "application/json"},
+                    json={"default_uom": default_uom_id},
+                    timeout=20,
+                ).raise_for_status()
             return c["id"]
     rr = httpx.post(
         f"{NSI_URL}/api/v1/item-categories/",
@@ -167,6 +197,56 @@ def ensure_rule_pcs_weight(token: str, item_id: int, from_cat_id: int, to_cat_id
     ).raise_for_status()
 
 
+def ensure_rule_density(token: str, item_id: int, from_cat_id: int, to_cat_id: int, density_kg_per_l: str) -> None:
+    r = httpx.get(f"{NSI_URL}/api/v1/rules/", headers=auth(token), timeout=20)
+    r.raise_for_status()
+    pair = {from_cat_id, to_cat_id}
+    for rule in r.json():
+        if (
+            rule.get("item") == item_id
+            and rule.get("rule_type") == "density"
+            and {rule.get("from_category"), rule.get("to_category")} == pair
+        ):
+            current_density = str((rule.get("params") or {}).get("density_kg_per_l", ""))
+            if current_density != str(density_kg_per_l) or rule.get("status") != "active":
+                httpx.put(
+                    f"{NSI_URL}/api/v1/rules/{rule['id']}/",
+                    headers={**auth(token), "Content-Type": "application/json"},
+                    json={
+                        "id": rule["id"],
+                        "item": item_id,
+                        "from_category": from_cat_id,
+                        "to_category": to_cat_id,
+                        "rule_type": "density",
+                        "conditions": rule.get("conditions") or {},
+                        "params": {"density_kg_per_l": density_kg_per_l},
+                        "priority": rule.get("priority", 0),
+                        "status": "active",
+                        "effective_from": rule.get("effective_from"),
+                        "effective_to": rule.get("effective_to"),
+                        "supersedes": rule.get("supersedes"),
+                    },
+                    timeout=20,
+                ).raise_for_status()
+            return
+
+    httpx.post(
+        f"{NSI_URL}/api/v1/rules/",
+        headers={**auth(token), "Content-Type": "application/json"},
+        json={
+            "item": item_id,
+            "from_category": from_cat_id,
+            "to_category": to_cat_id,
+            "rule_type": "density",
+            "conditions": {},
+            "params": {"density_kg_per_l": density_kg_per_l},
+            "priority": 0,
+            "status": "active",
+        },
+        timeout=20,
+    ).raise_for_status()
+
+
 def main() -> None:
     wait_http_ok(f"{NSI_URL}/healthz")
     wait_http_ok(f"{DOCS_URL}/healthz")
@@ -180,6 +260,12 @@ def main() -> None:
     cats = get_uom_cats(token)
     cat_by_code = {c["code"]: c for c in cats}
 
+    volume_cat_id = cat_by_code.get("VOLUME", {}).get("id")
+    if volume_cat_id and "M3" not in uom_by_code:
+        ensure_uom(token, "M3", "Кубический метр", volume_cat_id, "1000", 3)
+        uoms = get_uoms(token)
+        uom_by_code = {u["code"]: u for u in uoms}
+
     # global rules examples (will update factor_to_base for from_uom)
     if "CM" in uom_by_code and "M" in uom_by_code:
         ensure_global_uom_rule(token, uom_by_code["CM"]["id"], uom_by_code["M"]["id"], "0.01")
@@ -187,9 +273,15 @@ def main() -> None:
     if "TON" in uom_by_code and "KG" in uom_by_code:
         ensure_global_uom_rule(token, uom_by_code["TON"]["id"], uom_by_code["KG"]["id"], "1000")
         ensure_global_uom_rule(token, uom_by_code["KG"]["id"], uom_by_code["TON"]["id"], "0.001")
+    if "M3" in uom_by_code and "L" in uom_by_code:
+        ensure_global_uom_rule(token, uom_by_code["M3"]["id"], uom_by_code["L"]["id"], "1000")
+        ensure_global_uom_rule(token, uom_by_code["L"]["id"], uom_by_code["M3"]["id"], "0.001")
 
     # item categories + examples
     kg_id = uom_by_code.get("KG", {}).get("id")
+    m3_id = uom_by_code.get("M3", {}).get("id") or uom_by_code.get("L", {}).get("id")
+    if not m3_id:
+        raise RuntimeError("Missing UoM for VOLUME base (expected M3 or L)")
     m_id = uom_by_code.get("M", {}).get("id") or kg_id
     bag_id = uom_by_code.get("BAG", {}).get("id")
     pcs_id = uom_by_code.get("PCS", {}).get("id")
@@ -198,6 +290,7 @@ def main() -> None:
     sand_cat_id = ensure_item_category(token, "Песок", kg_id)
     fast_cat_id = ensure_item_category(token, "Крепёж", kg_id)
     pipes_cat_id = ensure_item_category(token, "Трубы", m_id)
+    bulk_cat_id = ensure_item_category(token, "Сыпучие стройматериалы", m3_id)
 
     if bag_id and kg_id:
         ensure_category_package(token, cement_cat_id, bag_id, kg_id, "50")
@@ -215,6 +308,23 @@ def main() -> None:
     )
     if pcs_id and kg_id and cat_by_code.get("COUNT") and cat_by_code.get("MASS"):
         ensure_rule_pcs_weight(token, bolt_id, cat_by_code["COUNT"]["id"], cat_by_code["MASS"]["id"], "0.023")  # 23 g
+
+    bulk_items = [
+        ("BULK-CRUSH-M800-20-40-001", "Щебень М 800, фракция 20-40 мм", "1.41"),
+        ("BULK-CRUSH-M800-20-40-002", "Щебень М 800, фракция 20-40 мм", "1.41"),
+        ("BULK-GRAVEL-5X20-001", "Щебень гравийный 5х20", "1.4"),
+        (
+            "BULK-DENSE-ROCK-M800-20-40-001",
+            "Щебень из плотных горных пород для строительных работ М 800, фракция 20-40 мм",
+            "1.45",
+        ),
+        ("BULK-RIVER-SAND-001", "Песок речной", "1.6"),
+        ("BULK-NATURAL-SAND-II-MEDIUM-001", "Песок природный для строительных работ II класс, средний", "1.55"),
+    ]
+    for sku, name, density in bulk_items:
+        bulk_item_id = ensure_item(token, sku, name, bulk_cat_id, m3_id)
+        if cat_by_code.get("MASS") and cat_by_code.get("VOLUME"):
+            ensure_rule_density(token, bulk_item_id, cat_by_code["MASS"]["id"], cat_by_code["VOLUME"]["id"], density)
 
     print("[seed] done")
 

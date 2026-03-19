@@ -51,6 +51,7 @@ def _seed_defaults() -> dict:
     add_uom("TON", "Tonne", "MASS", "1000", 3)
     add_uom("L", "Liter", "VOLUME", "1", 3)
     add_uom("ML", "Milliliter", "VOLUME", "0.001", 0)
+    add_uom("M3", "Cubic meter", "VOLUME", "1000", 3)
     add_uom("M", "Meter", "LENGTH", "1", 3)
     add_uom("CM", "Centimeter", "LENGTH", "0.01", 0)
     add_uom("PCS", "Piece", "COUNT", "1", 0)
@@ -62,6 +63,7 @@ def _seed_defaults() -> dict:
         ("SAND", "Sand", "KG"),
         ("FASTENERS", "Fasteners", "KG"),
         ("PIPES", "Pipes", "M"),
+        ("BULK_MATERIALS", "Сыпучие стройматериалы", "M3"),
     ]:
         item_cats[key] = ItemCategory.objects.create(name=name, default_uom=uoms[default_uom], is_active=True)
         created["item_categories"] += 1
@@ -87,6 +89,26 @@ def _seed_defaults() -> dict:
     pipe_item = add_item("PIPE-DEMO-001", "Pipe demo", "PIPES", "M", "M")
     bolt_item = add_item("BOLT-DEMO-001", "Bolt demo", "FASTENERS", "KG", "KG")
     demo_item = add_item("DEMO-ITEM-001", "Demo item (for converter tests)", "FASTENERS", "KG", "KG")
+    bulk_items = [
+        add_item("BULK-CRUSH-M800-20-40-001", "Щебень М 800, фракция 20-40 мм", "BULK_MATERIALS", "M3", "M3"),
+        add_item("BULK-CRUSH-M800-20-40-002", "Щебень М 800, фракция 20-40 мм", "BULK_MATERIALS", "M3", "M3"),
+        add_item("BULK-GRAVEL-5X20-001", "Щебень гравийный 5х20", "BULK_MATERIALS", "M3", "M3"),
+        add_item(
+            "BULK-DENSE-ROCK-M800-20-40-001",
+            "Щебень из плотных горных пород для строительных работ М 800, фракция 20-40 мм",
+            "BULK_MATERIALS",
+            "M3",
+            "M3",
+        ),
+        add_item("BULK-RIVER-SAND-001", "Песок речной", "BULK_MATERIALS", "M3", "M3"),
+        add_item(
+            "BULK-NATURAL-SAND-II-MEDIUM-001",
+            "Песок природный для строительных работ II класс, средний",
+            "BULK_MATERIALS",
+            "M3",
+            "M3",
+        ),
+    ]
 
     for cat_key, qty in [("CEMENT", "50"), ("SAND", "25")]:
         CategoryPackageSpec.objects.create(
@@ -140,6 +162,48 @@ def _seed_defaults() -> dict:
             "rule_type": "density",
             "params": {"density_kg_per_l": "0.8"},
         },
+        {
+            "item": bulk_items[0],
+            "from_category": cats["MASS"],
+            "to_category": cats["VOLUME"],
+            "rule_type": "density",
+            "params": {"density_kg_per_l": "1.41"},
+        },
+        {
+            "item": bulk_items[1],
+            "from_category": cats["MASS"],
+            "to_category": cats["VOLUME"],
+            "rule_type": "density",
+            "params": {"density_kg_per_l": "1.41"},
+        },
+        {
+            "item": bulk_items[2],
+            "from_category": cats["MASS"],
+            "to_category": cats["VOLUME"],
+            "rule_type": "density",
+            "params": {"density_kg_per_l": "1.4"},
+        },
+        {
+            "item": bulk_items[3],
+            "from_category": cats["MASS"],
+            "to_category": cats["VOLUME"],
+            "rule_type": "density",
+            "params": {"density_kg_per_l": "1.45"},
+        },
+        {
+            "item": bulk_items[4],
+            "from_category": cats["MASS"],
+            "to_category": cats["VOLUME"],
+            "rule_type": "density",
+            "params": {"density_kg_per_l": "1.6"},
+        },
+        {
+            "item": bulk_items[5],
+            "from_category": cats["MASS"],
+            "to_category": cats["VOLUME"],
+            "rule_type": "density",
+            "params": {"density_kg_per_l": "1.55"},
+        },
     ]:
         ConversionRule.objects.create(
             item=payload["item"],
@@ -158,6 +222,8 @@ def _seed_defaults() -> dict:
         ("M", "CM", "100"),
         ("TON", "KG", "1000"),
         ("KG", "TON", "0.001"),
+        ("M3", "L", "1000"),
+        ("L", "M3", "0.001"),
     ]:
         GlobalUomRule.objects.create(
             from_uom=uoms[from_code],
