@@ -59,10 +59,7 @@ def _seed_defaults() -> dict:
 
     item_cats: dict[str, ItemCategory] = {}
     for key, name, default_uom in [
-        ("CEMENT", "Cement", "KG"),
-        ("SAND", "Sand", "KG"),
         ("FASTENERS", "Fasteners", "KG"),
-        ("PIPES", "Pipes", "M"),
         ("BULK_MATERIALS", "Сыпучие стройматериалы", "M3"),
     ]:
         item_cats[key] = ItemCategory.objects.create(name=name, default_uom=uoms[default_uom], is_active=True)
@@ -86,9 +83,32 @@ def _seed_defaults() -> dict:
         created["item_policies"] += 1
         return item
 
-    pipe_item = add_item("PIPE-DEMO-001", "Pipe demo", "PIPES", "M", "M")
-    bolt_item = add_item("BOLT-DEMO-001", "Bolt demo", "FASTENERS", "KG", "KG")
-    demo_item = add_item("DEMO-ITEM-001", "Demo item (for converter tests)", "FASTENERS", "KG", "KG")
+    fastener_items = [
+        add_item("FAST-BOLT-M20X65-GOST7798-001", "Болт M20x65, 8,8, ГОСТ 7798-70 оц.", "FASTENERS", "KG", "KG"),
+        add_item("FAST-NUT-M16-8.8-ZN-KP8-001", "Гайка M16, 8,8, оцинк КП 8", "FASTENERS", "KG", "KG"),
+        add_item("FAST-NUT-M20-8.8-ZN-KP8-KK-001", "Гайка M20, 8,8, оцинк КП 8 KK", "FASTENERS", "KG", "KG"),
+        add_item("FAST-WASHER-16-8.8-ZN-M16-DIN125-001", "Шайба 16, 8,8, оц М16 DIN 125", "FASTENERS", "KG", "KG"),
+        add_item(
+            "FAST-WASHER-20-8.8-ZN-M20-DIN125-KKSR-001",
+            "Шайба 20, 8,8, оц М20 DIN 125 KK/SR",
+            "FASTENERS",
+            "KG",
+            "KG",
+        ),
+        add_item(
+            "FAST-WASHER-LARGE-M16-ZN-DIN9021-001",
+            "Шайба увеличенная М16 ОЦ (25кг) DIN9021 (ГОСТ 6958)",
+            "FASTENERS",
+            "KG",
+            "KG",
+        ),
+        add_item("FAST-NUT-M16-DIN934-001", "Гайка M16 DIN 934", "FASTENERS", "KG", "KG"),
+        add_item("FAST-NUT-M20-DIN934-001", "Гайка M20 DIN 934", "FASTENERS", "KG", "KG"),
+        add_item("FAST-WASHER-D16-DIN125-001", "Шайба d16 , DIN 125", "FASTENERS", "KG", "KG"),
+        add_item("FAST-WASHER-D20-DIN125-001", "Шайба d20 , DIN 125", "FASTENERS", "KG", "KG"),
+        add_item("FAST-BOLT-20X60-DIN933-001", "Болт 20х60 DIN 933", "FASTENERS", "KG", "KG"),
+        add_item("FAST-BOLT-16X55-DIN933-001", "Болт 16х55 DIN 933", "FASTENERS", "KG", "KG"),
+    ]
     bulk_items = [
         add_item("BULK-CRUSH-M800-20-40-001", "Щебень М 800, фракция 20-40 мм", "BULK_MATERIALS", "M3", "M3"),
         add_item("BULK-CRUSH-M800-20-40-002", "Щебень М 800, фракция 20-40 мм", "BULK_MATERIALS", "M3", "M3"),
@@ -110,57 +130,90 @@ def _seed_defaults() -> dict:
         ),
     ]
 
-    for cat_key, qty in [("CEMENT", "50"), ("SAND", "25")]:
-        CategoryPackageSpec.objects.create(
-            category=item_cats[cat_key],
-            package_uom=uoms["BAG"],
-            content_uom=uoms["KG"],
-            content_qty=Decimal(qty),
-            status="active",
-            supplier_code="",
-            barcode="",
-        )
-        created["category_packages"] += 1
-
-    PackageSpec.objects.create(
-        item=demo_item,
-        package_uom=uoms["BAG"],
-        content_uom=uoms["KG"],
-        content_qty=Decimal("25"),
-        status="active",
-        supplier_code="",
-        barcode="",
-    )
-    created["packages"] += 1
-
     for payload in [
         {
-            "item": bolt_item,
+            "item": fastener_items[0],
             "from_category": cats["COUNT"],
             "to_category": cats["MASS"],
             "rule_type": "pcs_weight",
-            "params": {"kg_per_pc": "0.023"},
+            "params": {"kg_per_pc": "0.219"},
         },
         {
-            "item": demo_item,
+            "item": fastener_items[1],
             "from_category": cats["COUNT"],
             "to_category": cats["MASS"],
             "rule_type": "pcs_weight",
-            "params": {"kg_per_pc": "2.5"},
+            "params": {"kg_per_pc": "0.0333"},
         },
         {
-            "item": pipe_item,
-            "from_category": cats["LENGTH"],
+            "item": fastener_items[2],
+            "from_category": cats["COUNT"],
             "to_category": cats["MASS"],
-            "rule_type": "kg_per_m",
-            "params": {"kg_per_m": "1.2"},
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.0640"},
         },
         {
-            "item": None,
-            "from_category": cats["MASS"],
-            "to_category": cats["VOLUME"],
-            "rule_type": "density",
-            "params": {"density_kg_per_l": "0.8"},
+            "item": fastener_items[3],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.0113"},
+        },
+        {
+            "item": fastener_items[4],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.0172"},
+        },
+        {
+            "item": fastener_items[5],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.0409"},
+        },
+        {
+            "item": fastener_items[6],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.0333"},
+        },
+        {
+            "item": fastener_items[7],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.0640"},
+        },
+        {
+            "item": fastener_items[8],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.0113"},
+        },
+        {
+            "item": fastener_items[9],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.0172"},
+        },
+        {
+            "item": fastener_items[10],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.2440"},
+        },
+        {
+            "item": fastener_items[11],
+            "from_category": cats["COUNT"],
+            "to_category": cats["MASS"],
+            "rule_type": "pcs_weight",
+            "params": {"kg_per_pc": "0.1122"},
         },
         {
             "item": bulk_items[0],

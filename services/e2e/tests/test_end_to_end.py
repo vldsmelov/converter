@@ -109,68 +109,14 @@ def test_openapi_and_full_flow():
         assert "info" in data and "title" in data["info"]
 
     with httpx.Client(timeout=20) as client:
-        # --- Prepare reference data in NSI ---
-        cats = client.get(f"{NSI_URL}/api/v1/uom-categories/", headers=auth_headers(token)).json()
-        mass_id = [c["id"] for c in cats if c["code"] == "MASS"][0]
-        count_id = [c["id"] for c in cats if c["code"] == "COUNT"][0]
+        # --- Use default seeded items (no E2E item creation) ---
+        items = client.get(f"{NSI_URL}/api/v1/items/", headers=auth_headers(token))
+        items.raise_for_status()
+        by_sku = {str(x.get("sku")): x for x in items.json()}
 
-        kg_id = ensure_uom(client, token, "KG", "Kilogram", mass_id, "1", 3)
-        pcs_id = ensure_uom(client, token, "PCS", "Pieces", count_id, "1", 0)
-        ton_id = ensure_uom(client, token, "TON", "Tonne", mass_id, "1000", 3)
-        bag_id = ensure_uom(client, token, "BAG", "Bag", count_id, "1", 0)
-
-        cat_id = ensure_item_category(client, token, "E2E Категория", kg_id)
-
-        sku = f"E2E-{uuid.uuid4().hex[:8]}"
-        item = client.post(
-            f"{NSI_URL}/api/v1/items/",
-            headers={**auth_headers(token), "Content-Type": "application/json"},
-            json={
-                "sku": sku,
-                "name": "E2E item",
-                "category": cat_id,
-                "is_active": True,
-                "policy": {
-                    "storage_uom": kg_id,
-                    "posting_uom": kg_id,
-                    "allow_fractional": True,
-                    "rounding_precision": 3,
-                },
-            },
-        )
-        item.raise_for_status()
-        item_id = item.json()["id"]
-
-        # PackageSpec: 1 BAG = 25 KG
-        pkg = client.post(
-            f"{NSI_URL}/api/v1/packages/",
-            headers={**auth_headers(token), "Content-Type": "application/json"},
-            json={
-                "item": item_id,
-                "package_uom": bag_id,
-                "content_uom": kg_id,
-                "content_qty": "25",
-                "status": "active",
-            },
-        )
-        pkg.raise_for_status()
-
-        # Rule: 1 PCS = 2.5 KG
-        rule = client.post(
-            f"{NSI_URL}/api/v1/rules/",
-            headers={**auth_headers(token), "Content-Type": "application/json"},
-            json={
-                "item": item_id,
-                "from_category": count_id,
-                "to_category": mass_id,
-                "rule_type": "pcs_weight",
-                "conditions": {},
-                "params": {"kg_per_pc": "2.5"},
-                "priority": 0,
-                "status": "active",
-            },
-        )
-        rule.raise_for_status()
+        bulk_item = by_sku["BULK-CRUSH-M800-20-40-001"]
+        fast_bolt_item = by_sku["FAST-BOLT-20X60-DIN933-001"]
+        fast_nut_item = by_sku["FAST-NUT-M16-DIN934-001"]
 
         # --- Create invoice in Documents ---
         inv_no = f"INV-E2E-{uuid.uuid4().hex[:6]}"
@@ -182,9 +128,9 @@ def test_openapi_and_full_flow():
                 "supplier": "ACME",
                 "doc_date": date.today().isoformat(),
                 "lines": [
-                    {"line_no": 1, "item_id": item_id, "qty": "1.5", "uom_code": "TON", "context": {"item_name": "E2E item"}},
-                    {"line_no": 2, "item_id": item_id, "qty": "2", "uom_code": "BAG", "context": {"item_name": "E2E item"}},
-                    {"line_no": 3, "item_id": item_id, "qty": "10", "uom_code": "PCS", "context": {"item_name": "E2E item"}},
+                    {"line_no": 1, "item_id": int(bulk_item["id"]), "qty": "1.5", "uom_code": "TON", "context": {"item_name": str(bulk_item["name"])}},
+                    {"line_no": 2, "item_id": int(fast_bolt_item["id"]), "qty": "10", "uom_code": "PCS", "context": {"item_name": str(fast_bolt_item["name"])}},
+                    {"line_no": 3, "item_id": int(fast_nut_item["id"]), "qty": "100", "uom_code": "PCS", "context": {"item_name": str(fast_nut_item["name"])}},
                 ],
             },
         )
@@ -211,10 +157,12 @@ def test_openapi_and_full_flow():
         j = g.json()
         # verify conversions
         by_line = {ln["line_no"]: ln for ln in j["lines"]}
-        assert by_line[1]["converted"]["posting_uom_code"] == "KG"
-        assert float(by_line[1]["converted"]["posting_qty"]) == 1500.0
-        assert float(by_line[2]["converted"]["posting_qty"]) == 50.0
-        assert float(by_line[3]["converted"]["posting_qty"]) == 25.0
+        assert by_line[1]["converted"]["posting_uom_code"] == "M3"
+        assert float(by_line[1]["converted"]["posting_qty"]) == 1.06383
+        assert by_line[2]["converted"]["posting_uom_code"] == "KG"
+        assert float(by_line[2]["converted"]["posting_qty"]) == 2.44
+        assert by_line[3]["converted"]["posting_uom_code"] == "KG"
+        assert float(by_line[3]["converted"]["posting_qty"]) == 3.33
 
         # --- Generate outputs ---
         r = client.post(f"{DOCS_URL}/api/v1/invoices/{inv_id}/generate/", headers=auth_headers(token))

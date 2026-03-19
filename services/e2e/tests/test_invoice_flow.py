@@ -103,77 +103,13 @@ def _ensure_item_category(token: str, name: str, default_uom_id: int) -> int:
     return int(created["id"])
 
 
-def _create_item_with_rules(token: str):
-    # categories
-    cats = _get_json(f"{NSI_URL}/api/v1/uom-categories/", token)
-    mass_id = int([c["id"] for c in cats if c["code"] == "MASS"][0])
-    count_id = int([c["id"] for c in cats if c["code"] == "COUNT"][0])
-
-    kg_id = _ensure_uom(token, "KG", "Kilogram", mass_id, "1", 3)
-    ton_id = _ensure_uom(token, "TON", "Tonne", mass_id, "1000", 3)
-    pcs_id = _ensure_uom(token, "PCS", "Pieces", count_id, "1", 0)
-    bag_id = _ensure_uom(token, "BAG", "Bag", count_id, "1", 0)
-    category_id = _ensure_item_category(token, "E2E Категория", kg_id)
-
-    sku = f"E2E-ITEM-{uuid.uuid4().hex[:8]}"
-    item = _post_json(
-        f"{NSI_URL}/api/v1/items/",
-        token,
-        {
-            "sku": sku,
-            "name": "E2E Test Item",
-            "category": category_id,
-            "is_active": True,
-            "policy": {
-                "storage_uom": kg_id,
-                "posting_uom": kg_id,
-                "allow_fractional": True,
-                "rounding_precision": 3,
-            },
-        },
-    )
-    item_id = int(item["id"])
-
-    # package: 1 BAG = 25 KG (ACTIVE)
-    _post_json(
-        f"{NSI_URL}/api/v1/packages/",
-        token,
-        {
-            "item": item_id,
-            "status": "active",
-            "package_uom": bag_id,
-            "content_qty": "25",
-            "content_uom": kg_id,
-            "supplier_code": "",
-            "barcode": "",
-            "effective_from": None,
-            "effective_to": None,
-        },
-    )
-
-    # rule: 1 PCS = 2.5 KG (ACTIVE)
-    _post_json(
-        f"{NSI_URL}/api/v1/rules/",
-        token,
-        {
-            "supersedes": None,
-            "item": item_id,
-            "from_category": count_id,
-            "to_category": mass_id,
-            "rule_type": "pcs_weight",
-            "conditions": {},
-            "params": {"kg_per_pc": "2.5"},
-            "priority": 0,
-            "status": "active",
-            "effective_from": None,
-            "effective_to": None,
-        },
-    )
-
+def _select_seed_items(token: str):
+    rows = _get_json(f"{NSI_URL}/api/v1/items/", token)
+    by_sku = {str(x.get("sku")): x for x in rows}
     return {
-        "item_id": item_id,
-        "sku": sku,
-        "uoms": {"KG": kg_id, "TON": ton_id, "PCS": pcs_id, "BAG": bag_id},
+        "bulk": by_sku["BULK-CRUSH-M800-20-40-001"],
+        "bolt": by_sku["FAST-BOLT-20X60-DIN933-001"],
+        "nut": by_sku["FAST-NUT-M16-DIN934-001"],
     }
 
 
@@ -202,9 +138,8 @@ def test_invoice_calculate_and_generate_e2e():
     # Use operator for end-to-end document flow.
     clerk_token = operator_token
 
-    # 1) Create item + package + rule via NSI (operator)
-    ctx = _create_item_with_rules(operator_token)
-    item_id = ctx["item_id"]
+    # 1) Use seeded NSI items (do not create E2E items)
+    items = _select_seed_items(operator_token)
 
     # 2) Create invoice via documents (clerk - no conversion roles)
     inv = _post_json(
@@ -215,9 +150,9 @@ def test_invoice_calculate_and_generate_e2e():
             "supplier": "ACME",
             "doc_date": "2026-03-03",
             "lines": [
-                {"line_no": 1, "item_id": item_id, "qty": "1.5", "uom_code": "TON", "context": {"item_name": "E2E Test Item"}},
-                {"line_no": 2, "item_id": item_id, "qty": "2", "uom_code": "BAG", "context": {"item_name": "E2E Test Item"}},
-                {"line_no": 3, "item_id": item_id, "qty": "10", "uom_code": "PCS", "context": {"item_name": "E2E Test Item"}},
+                {"line_no": 1, "item_id": int(items["bulk"]["id"]), "qty": "1.5", "uom_code": "TON", "context": {"item_name": str(items["bulk"]["name"])}},
+                {"line_no": 2, "item_id": int(items["bolt"]["id"]), "qty": "10", "uom_code": "PCS", "context": {"item_name": str(items["bolt"]["name"])}},
+                {"line_no": 3, "item_id": int(items["nut"]["id"]), "qty": "100", "uom_code": "PCS", "context": {"item_name": str(items["nut"]["name"])}},
             ],
         },
     )
@@ -233,15 +168,15 @@ def test_invoice_calculate_and_generate_e2e():
     lines = {int(l["line_no"]): l for l in inv_calc["lines"]}
 
     l1 = lines[1]["converted"]
-    assert _dec(l1["posting_qty"]) == Decimal("1500.000000")
-    assert l1["posting_uom_code"] == "KG"
+    assert _dec(l1["posting_qty"]) == Decimal("1.063830")
+    assert l1["posting_uom_code"] == "M3"
 
     l2 = lines[2]["converted"]
-    assert _dec(l2["posting_qty"]) == Decimal("50.000000")
+    assert _dec(l2["posting_qty"]) == Decimal("2.440000")
     assert l2["posting_uom_code"] == "KG"
 
     l3 = lines[3]["converted"]
-    assert _dec(l3["posting_qty"]) == Decimal("25.000000")
+    assert _dec(l3["posting_qty"]) == Decimal("3.330000")
     assert l3["posting_uom_code"] == "KG"
 
     # 4) Generate outputs
@@ -279,9 +214,9 @@ def test_invoice_calculate_and_generate_e2e():
     r1 = dict(rows)[1]
     r2 = dict(rows)[2]
     r3 = dict(rows)[3]
-    assert str(ws[f"E{r1}"].value) == "1500.000000 KG"
-    assert str(ws[f"E{r2}"].value) == "50.000000 KG"
-    assert str(ws[f"E{r3}"].value) == "25.000000 KG"
+    assert str(ws[f"E{r1}"].value) == "1.063830 M3"
+    assert str(ws[f"E{r2}"].value) == "2.440000 KG"
+    assert str(ws[f"E{r3}"].value) == "3.330000 KG"
     assert str(ws[f"F{r1}"].value) == "ok"
     assert str(ws[f"F{r2}"].value) == "ok"
     assert str(ws[f"F{r3}"].value) == "ok"

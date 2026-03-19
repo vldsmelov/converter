@@ -177,8 +177,34 @@ def ensure_global_uom_rule(token: str, from_uom_id: int, to_uom_id: int, mult: s
 def ensure_rule_pcs_weight(token: str, item_id: int, from_cat_id: int, to_cat_id: int, kg_per_pc: str) -> None:
     r = httpx.get(f"{NSI_URL}/api/v1/rules/", headers=auth(token), timeout=20)
     r.raise_for_status()
+    pair = {from_cat_id, to_cat_id}
     for rule in r.json():
-        if rule.get("item") == item_id and rule.get("rule_type") == "pcs_weight":
+        if (
+            rule.get("item") == item_id
+            and rule.get("rule_type") == "pcs_weight"
+            and {rule.get("from_category"), rule.get("to_category")} == pair
+        ):
+            current_kg_per_pc = str((rule.get("params") or {}).get("kg_per_pc", ""))
+            if current_kg_per_pc != str(kg_per_pc) or rule.get("status") != "active":
+                httpx.put(
+                    f"{NSI_URL}/api/v1/rules/{rule['id']}/",
+                    headers={**auth(token), "Content-Type": "application/json"},
+                    json={
+                        "id": rule["id"],
+                        "item": item_id,
+                        "from_category": from_cat_id,
+                        "to_category": to_cat_id,
+                        "rule_type": "pcs_weight",
+                        "conditions": rule.get("conditions") or {},
+                        "params": {"kg_per_pc": kg_per_pc},
+                        "priority": rule.get("priority", 0),
+                        "status": "active",
+                        "effective_from": rule.get("effective_from"),
+                        "effective_to": rule.get("effective_to"),
+                        "supersedes": rule.get("supersedes"),
+                    },
+                    timeout=20,
+                ).raise_for_status()
             return
     httpx.post(
         f"{NSI_URL}/api/v1/rules/",
@@ -247,6 +273,18 @@ def ensure_rule_density(token: str, item_id: int, from_cat_id: int, to_cat_id: i
     ).raise_for_status()
 
 
+def cleanup_legacy_items(token: str, keep_skus: set[str]) -> None:
+    r = httpx.get(f"{NSI_URL}/api/v1/items/", headers=auth(token), timeout=20)
+    r.raise_for_status()
+    legacy_skus = {"PIPE-DEMO-001", "BOLT-DEMO-001", "DEMO-ITEM-001"}
+    for it in r.json():
+        sku = str(it.get("sku") or "")
+        if sku in keep_skus:
+            continue
+        if sku in legacy_skus or sku.startswith("E2E-") or sku.startswith("E2E_"):
+            httpx.delete(f"{NSI_URL}/api/v1/items/{it['id']}/", headers=auth(token), timeout=20).raise_for_status()
+
+
 def main() -> None:
     wait_http_ok(f"{NSI_URL}/healthz")
     wait_http_ok(f"{DOCS_URL}/healthz")
@@ -277,38 +315,31 @@ def main() -> None:
         ensure_global_uom_rule(token, uom_by_code["M3"]["id"], uom_by_code["L"]["id"], "1000")
         ensure_global_uom_rule(token, uom_by_code["L"]["id"], uom_by_code["M3"]["id"], "0.001")
 
-    # item categories + examples
+    # item categories + seeded items
     kg_id = uom_by_code.get("KG", {}).get("id")
+    pcs_id = uom_by_code.get("PCS", {}).get("id")
     m3_id = uom_by_code.get("M3", {}).get("id") or uom_by_code.get("L", {}).get("id")
+    if not kg_id:
+        raise RuntimeError("Missing UoM KG")
     if not m3_id:
         raise RuntimeError("Missing UoM for VOLUME base (expected M3 or L)")
-    m_id = uom_by_code.get("M", {}).get("id") or kg_id
-    bag_id = uom_by_code.get("BAG", {}).get("id")
-    pcs_id = uom_by_code.get("PCS", {}).get("id")
-
-    cement_cat_id = ensure_item_category(token, "Цемент", kg_id)
-    sand_cat_id = ensure_item_category(token, "Песок", kg_id)
-    fast_cat_id = ensure_item_category(token, "Крепёж", kg_id)
-    pipes_cat_id = ensure_item_category(token, "Трубы", m_id)
+    fast_cat_id = ensure_item_category(token, "Fasteners", kg_id)
     bulk_cat_id = ensure_item_category(token, "Сыпучие стройматериалы", m3_id)
 
-    if bag_id and kg_id:
-        ensure_category_package(token, cement_cat_id, bag_id, kg_id, "50")
-        ensure_category_package(token, sand_cat_id, bag_id, kg_id, "25")
-
-    if m_id:
-        ensure_item(token, "PIPE-DEMO-001", "Труба канализационная", pipes_cat_id, m_id)
-
-    bolt_id = ensure_item(
-        token,
-        "BOLT-DEMO-001",
-        "Рым-болт удлиненный АРТ 8267 (AISI 316) М6х40",
-        fast_cat_id,
-        kg_id,
-    )
-    if pcs_id and kg_id and cat_by_code.get("COUNT") and cat_by_code.get("MASS"):
-        ensure_rule_pcs_weight(token, bolt_id, cat_by_code["COUNT"]["id"], cat_by_code["MASS"]["id"], "0.023")  # 23 g
-
+    fastener_items = [
+        ("FAST-BOLT-M20X65-GOST7798-001", "Болт M20x65, 8,8, ГОСТ 7798-70 оц.", "0.219"),
+        ("FAST-NUT-M16-8.8-ZN-KP8-001", "Гайка M16, 8,8, оцинк КП 8", "0.0333"),
+        ("FAST-NUT-M20-8.8-ZN-KP8-KK-001", "Гайка M20, 8,8, оцинк КП 8 KK", "0.0640"),
+        ("FAST-WASHER-16-8.8-ZN-M16-DIN125-001", "Шайба 16, 8,8, оц М16 DIN 125", "0.0113"),
+        ("FAST-WASHER-20-8.8-ZN-M20-DIN125-KKSR-001", "Шайба 20, 8,8, оц М20 DIN 125 KK/SR", "0.0172"),
+        ("FAST-WASHER-LARGE-M16-ZN-DIN9021-001", "Шайба увеличенная М16 ОЦ (25кг) DIN9021 (ГОСТ 6958)", "0.0409"),
+        ("FAST-NUT-M16-DIN934-001", "Гайка M16 DIN 934", "0.0333"),
+        ("FAST-NUT-M20-DIN934-001", "Гайка M20 DIN 934", "0.0640"),
+        ("FAST-WASHER-D16-DIN125-001", "Шайба d16 , DIN 125", "0.0113"),
+        ("FAST-WASHER-D20-DIN125-001", "Шайба d20 , DIN 125", "0.0172"),
+        ("FAST-BOLT-20X60-DIN933-001", "Болт 20х60 DIN 933", "0.2440"),
+        ("FAST-BOLT-16X55-DIN933-001", "Болт 16х55 DIN 933", "0.1122"),
+    ]
     bulk_items = [
         ("BULK-CRUSH-M800-20-40-001", "Щебень М 800, фракция 20-40 мм", "1.41"),
         ("BULK-CRUSH-M800-20-40-002", "Щебень М 800, фракция 20-40 мм", "1.41"),
@@ -321,6 +352,14 @@ def main() -> None:
         ("BULK-RIVER-SAND-001", "Песок речной", "1.6"),
         ("BULK-NATURAL-SAND-II-MEDIUM-001", "Песок природный для строительных работ II класс, средний", "1.55"),
     ]
+    keep_skus = {sku for sku, _, _ in fastener_items} | {sku for sku, _, _ in bulk_items}
+    cleanup_legacy_items(token, keep_skus)
+
+    if pcs_id and kg_id and cat_by_code.get("COUNT") and cat_by_code.get("MASS"):
+        for sku, name, kg_per_pc in fastener_items:
+            fast_item_id = ensure_item(token, sku, name, fast_cat_id, kg_id)
+            ensure_rule_pcs_weight(token, fast_item_id, cat_by_code["COUNT"]["id"], cat_by_code["MASS"]["id"], kg_per_pc)
+
     for sku, name, density in bulk_items:
         bulk_item_id = ensure_item(token, sku, name, bulk_cat_id, m3_id)
         if cat_by_code.get("MASS") and cat_by_code.get("VOLUME"):
