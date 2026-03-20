@@ -2,7 +2,7 @@ from datetime import timedelta
 
 from rest_framework import serializers
 
-from .models import Invoice, InvoiceLine, ConvertedLine, InvoiceFile
+from .models import FeedbackMessage, Invoice, InvoiceLine, ConvertedLine, InvoiceFile
 from .storage import get_minio_presign_client, get_bucket
 
 
@@ -78,3 +78,38 @@ class InvoiceListSerializer(serializers.ModelSerializer):
             "updated_at",
             "line_count",
         ]
+
+
+class FeedbackCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FeedbackMessage
+        fields = [
+            "id",
+            "kind",
+            "title",
+            "message",
+            "page_path",
+            "sender_name",
+            "sender_email",
+            "created_at",
+        ]
+        read_only_fields = ["id", "created_at"]
+
+
+class FeedbackAdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FeedbackMessage
+        fields = [
+            "id",
+            "kind",
+            "title",
+            "message",
+            "page_path",
+            "sender_name",
+            "sender_email",
+            "status",
+            "admin_note",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]

@@ -155,7 +155,7 @@ export default function InvoiceDetailPage() {
         subtitle={`Статус: ${status || "-"} • Создана: ${fmtDateTime(inv?.created_at)}`}
         right={
           <>
-            <button className="btn" onClick={() => nav("/")}>К списку</button>
+            <button className="btn" onClick={() => nav("/app")}>К списку</button>
             <button className="btn" onClick={load}>Обновить</button>
           </>
         }

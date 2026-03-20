@@ -89,3 +89,42 @@ class InvoiceFile(models.Model):
 
     def __str__(self):
         return f"{self.invoice_id}:{self.file_type} -> {self.object_key}"
+
+
+class FeedbackKind(models.TextChoices):
+    BUG = "bug", "Bug"
+    SUGGESTION = "suggestion", "Suggestion"
+    QUESTION = "question", "Question"
+    OTHER = "other", "Other"
+
+
+class FeedbackStatus(models.TextChoices):
+    NEW = "new", "New"
+    IN_PROGRESS = "in_progress", "In Progress"
+    DONE = "done", "Done"
+
+
+class FeedbackMessage(models.Model):
+    kind = models.CharField(max_length=16, choices=FeedbackKind.choices, default=FeedbackKind.OTHER)
+    title = models.CharField(max_length=200)
+    message = models.TextField()
+    page_path = models.CharField(max_length=300, blank=True, default="")
+
+    sender_name = models.CharField(max_length=120, blank=True, default="")
+    sender_email = models.EmailField(blank=True, default="")
+
+    status = models.CharField(max_length=16, choices=FeedbackStatus.choices, default=FeedbackStatus.NEW)
+    admin_note = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["kind", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"Feedback #{self.id} ({self.kind}, {self.status})"

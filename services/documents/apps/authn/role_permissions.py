@@ -8,6 +8,15 @@ class RoleByMethodPermission(BasePermission):
       write_role = "nsi.xxx.write"
     """
     def has_permission(self, request, view):
+        if getattr(view, "allow_anonymous", False):
+            return True
+        if request.method in SAFE_METHODS and getattr(view, "allow_anonymous_read", False):
+            return True
+        if request.method not in SAFE_METHODS:
+            anonymous_write_methods = set(getattr(view, "allow_anonymous_write_methods", []) or [])
+            if request.method in anonymous_write_methods:
+                return True
+
         if not getattr(request, "user", None) or not getattr(request.user, "is_authenticated", False):
             return False
 

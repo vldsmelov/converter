@@ -585,7 +585,7 @@ export default function CreateInvoicePage() {
       <PageHeader
         title="Создание накладной"
         subtitle="Табличная часть и проверка правил конвертации по строкам."
-        right={<button className="btn" onClick={() => nav("/")}>Отмена</button>}
+        right={<button className="btn" onClick={() => nav("/app")}>Отмена</button>}
       />
 
       {err && <div className="error-banner">{err}</div>}
@@ -698,7 +698,7 @@ export default function CreateInvoicePage() {
         </div>
 
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={() => nav("/")}>Отмена</button>
+          <button className="btn" onClick={() => nav("/app")}>Отмена</button>
           <button className="btn primary" onClick={create} disabled={creating}>
             {creating ? "Создаю..." : "Создать накладную"}
           </button>

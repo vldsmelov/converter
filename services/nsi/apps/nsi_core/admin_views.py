@@ -12,6 +12,11 @@ from apps.authn.role_permissions import RoleByMethodPermission
 from .models import SystemDefaultField
 from .serializers import SystemDefaultFieldSerializer
 
+REQUIRED_PERMISSION_ROLES: dict[str, str] = {
+    "documents.feedback.read": "Read feedback inbox",
+    "documents.feedback.write": "Manage feedback inbox entries",
+}
+
 
 def _normalize_bundle_name(name: str) -> str:
     s = (name or "").strip().replace(" ", ".").lower()
@@ -31,6 +36,14 @@ def _is_bundle_role(role: dict[str, Any]) -> bool:
         if isinstance(vals, list):
             return "1" in vals or "true" in vals
     return str(role.get("name", "")).startswith("bundle.")
+
+
+def _ensure_required_permission_roles(kc: KeycloakAdminClient) -> None:
+    role_names = {str(r.get("name")) for r in kc.list_roles() if r.get("name")}
+    for role_name, description in REQUIRED_PERMISSION_ROLES.items():
+        if role_name in role_names:
+            continue
+        kc.create_role(name=role_name, description=description)
 
 
 class _BundleCreateSerializer(serializers.Serializer):
@@ -73,6 +86,7 @@ class AdminIamRolesView(APIView):
     def get(self, request):
         try:
             kc = KeycloakAdminClient()
+            _ensure_required_permission_roles(kc)
             roles = kc.list_roles()
             permission_roles: list[str] = []
             bundles: list[dict[str, Any]] = []

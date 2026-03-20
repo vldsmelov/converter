@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import { resolveHelpTopic } from "../lib/help";
 import AdminConsolePage from "./AdminConsolePage";
 import CreateInvoicePage from "./CreateInvoicePage";
+import FeedbackInboxPage from "./FeedbackInboxPage";
+import HelpPage from "./HelpPage";
 import InvoiceDetailPage from "./InvoiceDetailPage";
 import InvoicesPage from "./InvoicesPage";
 import NsiItemCategoriesPage from "./NsiItemCategoriesPage";
@@ -20,6 +23,7 @@ import NsiUomCreatePage from "./NsiUomCreatePage";
 import NsiUomEditPage from "./NsiUomEditPage";
 import NsiUomsPage from "./NsiUomsPage";
 import QuickCalculatorPage from "./QuickCalculatorPage";
+import PublicFeedbackPage from "./PublicFeedbackPage";
 
 type NavLinkItem = {
   to: string;
@@ -27,7 +31,7 @@ type NavLinkItem = {
 };
 
 const PRIMARY_LINKS: NavLinkItem[] = [
-  { to: "/", label: "Накладные" },
+  { to: "/app", label: "Накладные" },
   { to: "/create", label: "Создать" },
   { to: "/calculator", label: "Калькулятор" },
 ];
@@ -42,6 +46,7 @@ const NSI_LINKS: NavLinkItem[] = [
 
 export default function App() {
   const { keycloak, token } = useAuth();
+  const location = useLocation();
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     const stored = window.localStorage.getItem("ui_theme");
     if (stored === "dark" || stored === "light") return stored;
@@ -50,11 +55,28 @@ export default function App() {
 
   const realmRoles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
   const isAdmin = useMemo(() => realmRoles.includes("system.admin"), [realmRoles]);
+  const canReadFeedback = useMemo(
+    () => isAdmin || realmRoles.includes("documents.feedback.read"),
+    [isAdmin, realmRoles]
+  );
+  const currentHelpTopic = useMemo(() => resolveHelpTopic(location.pathname), [location.pathname]);
+  const helpUrl = useMemo(
+    () => `/help/${currentHelpTopic}?from=${encodeURIComponent(location.pathname)}`,
+    [currentHelpTopic, location.pathname]
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     window.localStorage.setItem("ui_theme", theme);
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem("last_app_path", location.pathname);
+    } catch {
+      // ignore storage errors
+    }
+  }, [location.pathname]);
 
   function openAdminPanel() {
     const w = window.open("/admin/console", "admin_console", "popup=yes,width=1320,height=900");
@@ -86,6 +108,11 @@ export default function App() {
         </div>
 
         <div className="row" style={{ gap: 8 }}>
+          <Link className="btn btn-tight" to={helpUrl}>Инструкция</Link>
+          <Link className="btn btn-tight" to={canReadFeedback ? "/feedback/inbox" : "/feedback"}>
+            Обратная связь
+          </Link>
+
           {isAdmin && (
             <button
               className="btn btn-tight"
@@ -115,9 +142,13 @@ export default function App() {
 
       <div className="app-main">
         <Routes>
-          <Route path="/" element={<InvoicesPage />} />
+          <Route path="/" element={<Navigate to="/app" replace />} />
+          <Route path="/app" element={<InvoicesPage />} />
           <Route path="/create" element={<CreateInvoicePage />} />
           <Route path="/calculator" element={<QuickCalculatorPage token={token} />} />
+          <Route path="/feedback" element={<PublicFeedbackPage />} />
+          <Route path="/help" element={<Navigate to="/help/general" replace />} />
+          <Route path="/help/:topic" element={<HelpPage />} />
           <Route path="/invoices/:id" element={<InvoiceDetailPage />} />
 
           <Route path="/nsi/uoms" element={<NsiUomsPage />} />
@@ -140,6 +171,7 @@ export default function App() {
           <Route path="/nsi/rules/new" element={<NsiRulesWizardPage />} />
           <Route path="/nsi/rules/:scope/:id/edit" element={<NsiRulesWizardPage />} />
 
+          <Route path="/feedback/inbox" element={<FeedbackInboxPage />} />
           <Route path="/admin/console" element={<AdminConsolePage />} />
         </Routes>
       </div>
@@ -150,4 +182,3 @@ export default function App() {
     </div>
   );
 }
-

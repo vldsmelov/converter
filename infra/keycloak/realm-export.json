@@ -23,6 +23,8 @@
       { "name": "documents.invoice.write" },
       { "name": "documents.invoice.calculate" },
       { "name": "documents.invoice.generate" },
+      { "name": "documents.feedback.read" },
+      { "name": "documents.feedback.write" },
 
       { "name": "system.admin" }
     ]

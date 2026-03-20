@@ -1,15 +1,20 @@
 from django.http import FileResponse, Http404
 from django.db.models import Count
 from django.db import transaction
-from rest_framework import viewsets, status
+from rest_framework import mixins, viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.authn.role_permissions import RoleByMethodPermission
 
-from .models import Invoice, InvoiceFile
-from .serializers import InvoiceListSerializer, InvoiceSerializer
+from .models import FeedbackMessage, Invoice, InvoiceFile
+from .serializers import (
+    FeedbackAdminSerializer,
+    FeedbackCreateSerializer,
+    InvoiceListSerializer,
+    InvoiceSerializer,
+)
 from .tasks import calculate_invoice, generate_invoice_outputs
 from .storage import get_minio_client, get_bucket, MinioStream
 
@@ -108,6 +113,26 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         return response
 
 
+class FeedbackViewSet(
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    queryset = FeedbackMessage.objects.all().order_by("-created_at")
+    permission_classes = [RoleByMethodPermission]
+
+    read_role = ["documents.feedback.read", "system.admin"]
+    write_role = ["documents.feedback.write", "system.admin"]
+    allow_anonymous_write_methods = {"POST"}
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return FeedbackCreateSerializer
+        return FeedbackAdminSerializer
+
+
 class AdminResetDefaultsView(APIView):
     permission_classes = [RoleByMethodPermission]
     write_role = "system.admin"
@@ -118,9 +143,11 @@ class AdminResetDefaultsView(APIView):
         )
         deleted_invoices = Invoice.objects.count()
         deleted_files = InvoiceFile.objects.count()
+        deleted_feedback = FeedbackMessage.objects.count()
 
         with transaction.atomic():
             Invoice.objects.all().delete()
+            FeedbackMessage.objects.all().delete()
 
         removed_objects = 0
         storage_errors: list[str] = []
@@ -144,6 +171,7 @@ class AdminResetDefaultsView(APIView):
                     "deleted": {
                         "invoices": deleted_invoices,
                         "invoice_files": deleted_files,
+                        "feedback_messages": deleted_feedback,
                     },
                     "storage": {
                         "requested_objects": len(object_keys),

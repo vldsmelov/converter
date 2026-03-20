@@ -509,11 +509,71 @@ small { color: var(--muted); }
   margin-top: 8px;
 }
 
+textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  padding: 7px 9px;
+  border-radius: 8px;
+  font-family: inherit;
+}
+
+.help-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(260px, 1fr));
+}
+
+.help-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.help-list li {
+  margin: 0 0 8px;
+}
+
+.help-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.feedback-card {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.feedback-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+}
+
+.feedback-textarea {
+  width: 100%;
+  min-height: 120px;
+  resize: vertical;
+}
+
+.feedback-note {
+  width: 100%;
+  min-height: 70px;
+  resize: vertical;
+  font-size: 12px;
+}
+
 @media (max-width: 720px) {
   .modal-grid {
     grid-template-columns: 1fr;
   }
   .admin-check-grid {
+    grid-template-columns: 1fr;
+  }
+  .help-grid {
+    grid-template-columns: 1fr;
+  }
+  .feedback-grid {
     grid-template-columns: 1fr;
   }
 }

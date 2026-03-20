@@ -243,6 +243,14 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     window.localStorage.setItem("ui_theme", theme);
   }, [theme, props.publicMode]);
 
+  useEffect(() => {
+    try {
+      window.sessionStorage.setItem("last_app_path", window.location.pathname);
+    } catch {
+      // ignore storage errors
+    }
+  }, []);
+
   function resetOutput() {
     setResultQtyRaw("");
     setResultUom("");
@@ -361,6 +369,17 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
         subtitle="Быстрый расчёт без создания накладной: выберите номенклатуру, ЕИ и количество."
         right={
           <div className="row" style={{ gap: 8 }}>
+            <button
+              className="btn"
+              onClick={() => nav(`/help/calculator?from=${encodeURIComponent(window.location.pathname)}`)}
+            >
+              Инструкция
+            </button>
+            {props.publicMode && (
+              <button className="btn" onClick={() => nav("/feedback")}>
+                Обратная связь
+              </button>
+            )}
             {props.publicMode && (
               <button
                 className="btn icon-btn"
@@ -375,10 +394,10 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               className="btn"
               onClick={() => {
                 if (props.publicMode) {
-                  window.location.href = "/";
+                  window.location.href = "/app";
                   return;
                 }
-                nav("/");
+                nav("/app");
               }}
             >
               {props.publicMode ? "Войти в систему" : "К накладным"}
