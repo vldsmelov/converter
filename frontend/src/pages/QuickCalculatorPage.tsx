@@ -214,8 +214,6 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       setItems(it ?? []);
       setUoms(u ?? []);
       setUomCats(uc ?? []);
-
-      if ((it ?? []).length && itemId === null) setItemId(it[0].id);
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
