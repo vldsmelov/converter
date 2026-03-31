@@ -41,6 +41,12 @@ export default function NsiRulesPage() {
     return pairs.length > 0 ? pairs.join(", ") : "-";
   }
 
+  function formatRuleConditions(rule: any): string {
+    const conditions = rule?.conditions ?? {};
+    const pairs = Object.entries(conditions).map(([k, v]) => `${k}=${v}`);
+    return pairs.length > 0 ? pairs.join(", ") : "общие";
+  }
+
   async function load() {
     if (!token) return;
     setErr(null);
@@ -204,7 +210,7 @@ export default function NsiRulesPage() {
           <h4 style={{ marginTop: 0 }}>Правила для номенклатуры</h4>
           <table>
             <thead>
-              <tr><th>ID</th><th>Номенклатура</th><th>Тип</th><th>Параметры</th><th>Статус</th><th></th></tr>
+              <tr><th>ID</th><th>Номенклатура</th><th>Тип</th><th>Условия</th><th>Параметры</th><th>Статус</th><th></th></tr>
             </thead>
             <tbody>
               {itemRules.map((r: any) => (
@@ -212,6 +218,7 @@ export default function NsiRulesPage() {
                   <td>{r.id}</td>
                   <td>{itemById.get(r.item)?.name ?? r.item}</td>
                   <td>{r.rule_type}</td>
+                  <td>{formatRuleConditions(r)}</td>
                   <td>{formatRuleParams(r)}</td>
                   <td>{r.status}</td>
                   <td style={{ textAlign: "right" }}>
@@ -222,7 +229,7 @@ export default function NsiRulesPage() {
                   </td>
                 </tr>
               ))}
-              {itemRules.length === 0 && <tr><td colSpan={6}><small>Пока нет правил по номенклатуре.</small></td></tr>}
+              {itemRules.length === 0 && <tr><td colSpan={7}><small>Пока нет правил по номенклатуре.</small></td></tr>}
             </tbody>
           </table>
         </div>

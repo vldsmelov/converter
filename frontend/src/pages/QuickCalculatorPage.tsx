@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, requestJson } from "../api/request";
-import BrandLogo from "../components/BrandLogo";
+import SiteTopbar from "../components/SiteTopbar";
 import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
@@ -86,6 +86,8 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   const [calculating, setCalculating] = useState(false);
 
   const [itemId, setItemId] = useState<number | null>(null);
+  const [supplierCode, setSupplierCode] = useState("");
+  const [itemRuleSuppliers, setItemRuleSuppliers] = useState<string[]>([]);
   const [fromUom, setFromUom] = useState("");
   const [toUom, setToUom] = useState("");
   const [qty, setQty] = useState("1");
@@ -106,6 +108,33 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   const itemById = useMemo(() => new Map<number, any>(items.map((i: any) => [i.id, i])), [items]);
 
   const selectedItem = itemId ? itemById.get(itemId) : null;
+  const supplierOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    const packages = selectedItem?.packages ?? [];
+    for (const p of packages) {
+      const s = String(p?.supplier_code ?? "").trim();
+      if (!s) continue;
+      const k = s.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(s);
+    }
+    return out.sort((a, b) => a.localeCompare(b, "ru"));
+  }, [selectedItem]);
+  const variantOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const out: string[] = [];
+    [...supplierOptions, ...itemRuleSuppliers].forEach((s) => {
+      const val = String(s ?? "").trim();
+      if (!val) return;
+      const k = val.toLowerCase();
+      if (seen.has(k)) return;
+      seen.add(k);
+      out.push(val);
+    });
+    return out.sort((a, b) => a.localeCompare(b, "ru"));
+  }, [supplierOptions, itemRuleSuppliers]);
 
   const defaultTargetUom = useMemo(() => {
     if (!selectedItem) return "";
@@ -116,12 +145,21 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
 
   const defaultFromUom = useMemo(() => {
     if (!selectedItem) return "";
-    const pkg = (selectedItem.packages ?? [])[0];
+    const packages = selectedItem.packages ?? [];
+    const requestedSupplier = supplierCode.trim().toLowerCase();
+    let pkg = null as any;
+    if (requestedSupplier) {
+      pkg = packages.find((p: any) => String(p?.supplier_code ?? "").trim().toLowerCase() === requestedSupplier)
+        ?? packages.find((p: any) => !String(p?.supplier_code ?? "").trim());
+    } else {
+      pkg = packages.find((p: any) => !String(p?.supplier_code ?? "").trim())
+        ?? packages[0];
+    }
     const pkgCode = pkg?.package_uom ? up(uomById.get(pkg.package_uom)?.code) : "";
     if (pkgCode) return pkgCode;
     if (defaultTargetUom) return defaultTargetUom;
     return up(uoms[0]?.code ?? "");
-  }, [selectedItem, uomById, defaultTargetUom, uoms]);
+  }, [selectedItem, supplierCode, uomById, defaultTargetUom, uoms]);
 
   const roundedQty = useMemo(() => {
     if (!resultQtyRaw) return "";
@@ -179,6 +217,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     ruleType?: string | null;
     fromCategory?: string | null;
     toCategory?: string | null;
+    supplierCode?: string | null;
   }): string {
     const from = up(args.fromCode);
     const to = up(args.toCode);
@@ -201,6 +240,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     if (scope === "item" && inferredRuleType) qs.set("rule_type", inferredRuleType);
     if (args.item?.category) qs.set("category_id", String(args.item.category));
     if (args.item?.id) qs.set("item_id", String(args.item.id));
+    if (args.supplierCode && args.supplierCode.trim()) qs.set("supplier_code", args.supplierCode.trim());
     return `/nsi/rules/new?${qs.toString()}`;
   }
 
@@ -229,12 +269,53 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     if (!selectedItem || !itemId) return;
     if (prevItemId.current === itemId) return;
     prevItemId.current = itemId;
+    setSupplierCode("");
+    setItemRuleSuppliers([]);
 
     if (defaultTargetUom) setToUom(defaultTargetUom);
     if (defaultFromUom) setFromUom(defaultFromUom);
 
     resetOutput();
   }, [itemId, selectedItem, defaultTargetUom, defaultFromUom]);
+
+  useEffect(() => {
+    if (!itemId) {
+      setItemRuleSuppliers([]);
+      return;
+    }
+
+    let cancelled = false;
+    requestJson<any[]>({
+      method: "GET",
+      url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/?item=${itemId}&status=active`,
+      token,
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        const next = new Set<string>();
+        const selectedPair = new Set([up(fromCatCode), up(toCatCode)]);
+        const hasSelectedPair = !selectedPair.has("-") && selectedPair.size === 2;
+        for (const r of rows ?? []) {
+          if (!r || r.item !== itemId || r.status !== "active") continue;
+          if (hasSelectedPair) {
+            const rf = up(uomCatsById.get(r.from_category)?.code ?? "");
+            const rt = up(uomCatsById.get(r.to_category)?.code ?? "");
+            const rp = new Set([rf, rt]);
+            if (!(rp.has(up(fromCatCode)) && rp.has(up(toCatCode)))) continue;
+          }
+          const supplier = String((r.conditions ?? {}).supplier_code ?? "").trim();
+          if (supplier) next.add(supplier);
+        }
+        setItemRuleSuppliers(Array.from(next).sort((a, b) => a.localeCompare(b, "ru")));
+      })
+      .catch(() => {
+        if (!cancelled) setItemRuleSuppliers([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId, token, fromCatCode, toCatCode, uomCatsById]);
 
   useEffect(() => {
     if (!props.publicMode) return;
@@ -300,6 +381,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           from_uom: up(fromUom),
           to_uom: up(toUom),
           context: {},
+          supplier_code: supplierCode.trim() || undefined,
         },
       });
 
@@ -314,6 +396,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           item: selectedItem,
           fromCode: fromUom,
           toCode: toUom,
+          supplierCode,
         });
         let detailText = parsed.message ?? "Нет подходящего правила для перевода.";
 
@@ -328,6 +411,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
             ruleType: first.rule_type ?? null,
             fromCategory: first.from_category ?? null,
             toCategory: first.to_category ?? null,
+            supplierCode,
           });
 
           const stepsText = parsed.suggestedSteps
@@ -361,51 +445,12 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     }
   }
 
-  return (
+  const pageContent = (
     <div className="card calculator-page">
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
-        <BrandLogo compact />
-      </div>
       <PageHeader
         title="Калькулятор конвертации"
         subtitle="Быстрый расчёт без создания накладной: выберите номенклатуру, ЕИ и количество."
-        right={
-          <div className="row" style={{ gap: 8 }}>
-            <button
-              className="btn"
-              onClick={() => nav(`/help/calculator?from=${encodeURIComponent(window.location.pathname)}`)}
-            >
-              Инструкция
-            </button>
-            {props.publicMode && (
-              <button className="btn" onClick={() => nav("/feedback")}>
-                Обратная связь
-              </button>
-            )}
-            {props.publicMode && (
-              <button
-                className="btn icon-btn"
-                onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-                title={theme === "dark" ? "Светлая тема" : "Темная тема"}
-                aria-label={theme === "dark" ? "Светлая тема" : "Темная тема"}
-              >
-                {theme === "dark" ? "☀" : "☾"}
-              </button>
-            )}
-            <button
-              className="btn"
-              onClick={() => {
-                if (props.publicMode) {
-                  window.location.href = "/app";
-                  return;
-                }
-                nav("/app");
-              }}
-            >
-              {props.publicMode ? "Войти в систему" : "К накладным"}
-            </button>
-          </div>
-        }
+        right={!props.publicMode ? (<button className="btn" onClick={() => nav("/app")}>К накладным</button>) : undefined}
       />
 
       {err && (
@@ -431,6 +476,15 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           <label className="field" style={{ flex: 1, minWidth: 360 }}>
             <small>Номенклатура</small>
             <ItemLookup token={token} value={itemId} onChange={(item) => setItemId(item?.id ?? null)} />
+          </label>
+          <label className="field" style={{ minWidth: 240 }}>
+            <small>Вариант перевода</small>
+            <select value={supplierCode} onChange={(e) => setSupplierCode(e.target.value)}>
+              <option value="">По умолчанию</option>
+              {variantOptions.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
           </label>
           <label className="field" style={{ minWidth: 240, flex: 1 }}>
             <small>Округление</small>
@@ -479,6 +533,12 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
         </div>
         <div className="calculator-categories">
           <small>Категории: {fromCatCode} {"->"} {toCatCode}</small>
+          <br />
+          <small>
+            {supplierCode.trim()
+              ? `Используется вариант: ${supplierCode.trim()}`
+              : "Используется вариант: По умолчанию"}
+          </small>
         </div>
       </div>
       <div className="card calculator-result-card" style={{ marginTop: 12 }}>
@@ -538,5 +598,18 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       </div>
     </div>
   );
+
+  if (props.publicMode) {
+    return (
+      <>
+        <SiteTopbar publicMode />
+        <div className="container app-shell">
+          <div className="app-main">{pageContent}</div>
+        </div>
+      </>
+    );
+  }
+
+  return pageContent;
 }
 

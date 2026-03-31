@@ -6,6 +6,7 @@ export type HelpTopic =
   | "invoice_detail"
   | "nsi_uoms"
   | "nsi_categories"
+  | "nsi_counterparties"
   | "nsi_items"
   | "nsi_packages"
   | "nsi_rules"
@@ -115,6 +116,19 @@ export const HELP_ARTICLES: Record<HelpTopic, HelpArticle> = {
       "Не используйте слишком широкие категории без необходимости.",
     ],
   },
+  nsi_counterparties: {
+    title: "НСИ: Контрагенты",
+    summary: "Единый справочник контрагентов для вариантов правил перевода.",
+    steps: [
+      "Создайте контрагентов, которых используете как варианты поставки.",
+      "Поддерживайте единый формат названий без дублей.",
+      "Используйте этих контрагентов в мастере правил при создании вариантов.",
+    ],
+    tips: [
+      "Отключайте неактуальных контрагентов вместо удаления, если важна история.",
+      "Не создавайте похожие названия с разным регистром и пробелами.",
+    ],
+  },
   nsi_items: {
     title: "НСИ: Номенклатура",
     summary: "Создание карточек номенклатуры, единиц хранения/оприходования и пакетов.",
@@ -220,6 +234,7 @@ export function resolveHelpTopic(pathname: string): HelpTopic {
 
   if (p.startsWith("/nsi/uoms")) return "nsi_uoms";
   if (p.startsWith("/nsi/item-categories")) return "nsi_categories";
+  if (p.startsWith("/nsi/counterparties")) return "nsi_counterparties";
   if (p.startsWith("/nsi/items")) return "nsi_items";
   if (p.startsWith("/nsi/packages")) return "nsi_packages";
   if (p.startsWith("/nsi/rules/new") || p.startsWith("/nsi/rules/item/") || p.startsWith("/nsi/rules/category/") || p.startsWith("/nsi/rules/global/")) return "nsi_rule_wizard";

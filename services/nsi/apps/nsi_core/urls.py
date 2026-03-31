@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 
 from .views import (
     AdminResetDefaultsView,
+    CounterpartyViewSet,
     ConversionRuleViewSet,
     GlobalUomRuleViewSet,
     ItemViewSet,
@@ -22,6 +23,7 @@ from .admin_views import (
 router = DefaultRouter()
 router.register(r"uom-categories", UoMCategoryViewSet, basename="uom-category")
 router.register(r"uoms", UoMViewSet, basename="uom")
+router.register(r"counterparties", CounterpartyViewSet, basename="counterparty")
 router.register(r"items", ItemViewSet, basename="item")
 router.register(r"packages", PackageSpecViewSet, basename="package")
 router.register(r"rules", ConversionRuleViewSet, basename="rule")

@@ -10,8 +10,9 @@ from rest_framework.views import APIView
 
 from apps.authn.role_permissions import RoleByMethodPermission
 
-from .models import ConversionRule, GlobalUomRule, Item, PackageSpec, UoM, UoMCategory
+from .models import ConversionRule, Counterparty, GlobalUomRule, Item, PackageSpec, UoM, UoMCategory
 from .serializers import (
+    CounterpartySerializer,
     ConversionRuleSerializer,
     GlobalUomRuleSerializer,
     ItemLookupSerializer,
@@ -46,6 +47,27 @@ class UoMViewSet(viewsets.ModelViewSet):
     read_role = "nsi.uom.read"
     write_role = "nsi.uom.write"
     allow_anonymous_read = True
+
+
+class CounterpartyViewSet(viewsets.ModelViewSet):
+    queryset = Counterparty.objects.all().order_by("name", "id")
+    serializer_class = CounterpartySerializer
+    permission_classes = [RoleByMethodPermission]
+    read_role = "nsi.item.read"
+    write_role = "nsi.item.write"
+    allow_anonymous_read = True
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        q = str(self.request.query_params.get("q", "")).strip()
+        if q:
+            qs = qs.filter(name__icontains=q)
+        active_raw = str(self.request.query_params.get("active", "")).strip().lower()
+        if active_raw in {"1", "true", "yes"}:
+            qs = qs.filter(is_active=True)
+        elif active_raw in {"0", "false", "no"}:
+            qs = qs.filter(is_active=False)
+        return qs
 
 
 
@@ -139,6 +161,21 @@ class ConversionRuleViewSet(viewsets.ModelViewSet):
     permission_classes = [RoleByMethodPermission]
     read_role = "nsi.rule.read"
     write_role = "nsi.rule.write"
+    allow_anonymous_read = True
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        item_raw = self.request.query_params.get("item")
+        if item_raw:
+            try:
+                item_id = int(item_raw)
+                qs = qs.filter(item_id=item_id)
+            except (TypeError, ValueError):
+                pass
+        status_raw = str(self.request.query_params.get("status", "")).strip().lower()
+        if status_raw:
+            qs = qs.filter(status=status_raw)
+        return qs
 
 
 class AdminResetDefaultsView(APIView):

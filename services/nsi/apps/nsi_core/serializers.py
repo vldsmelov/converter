@@ -7,6 +7,7 @@ from rest_framework import serializers
 from apps.catalog.models import CategoryPackageSpec, ItemCategory
 
 from .models import (
+    Counterparty,
     ConversionRule,
     DefaultFieldType,
     GlobalUomRule,
@@ -77,6 +78,13 @@ class UoMSerializer(serializers.ModelSerializer):
         fields = ["id", "code", "name", "category", "factor_to_base", "precision"]
 
 
+class CounterpartySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Counterparty
+        fields = ["id", "name", "is_active", "created_at"]
+        read_only_fields = ["id", "created_at"]
+
+
 class ItemPolicySerializer(serializers.ModelSerializer):
     class Meta:
         model = ItemPolicy
@@ -109,11 +117,29 @@ class ItemSerializer(serializers.ModelSerializer):
 
     def get_packages(self, obj: Item):
         item_pkgs = list(obj.packages.all())
-        item_pkg_uom_ids = {p.package_uom_id for p in item_pkgs}
+        item_pkg_keys = {
+            (
+                int(p.package_uom_id),
+                str(getattr(p, "supplier_code", "") or "").strip().casefold(),
+                str(getattr(p, "barcode", "") or "").strip(),
+            )
+            for p in item_pkgs
+        }
         data = PackageSpecSerializer(item_pkgs, many=True).data
 
-        # Include category packages only if item doesn't have its own spec for the same package_uom
-        cat_pkgs = CategoryPackageSpec.objects.filter(category=obj.category).exclude(package_uom_id__in=item_pkg_uom_ids)
+        # Include category packages unless item has an exact variant
+        # for the same (package_uom, supplier_code, barcode).
+        cat_pkgs_all = CategoryPackageSpec.objects.filter(category=obj.category)
+        cat_pkgs = [
+            cp
+            for cp in cat_pkgs_all
+            if (
+                int(cp.package_uom_id),
+                str(getattr(cp, "supplier_code", "") or "").strip().casefold(),
+                str(getattr(cp, "barcode", "") or "").strip(),
+            )
+            not in item_pkg_keys
+        ]
         data += CategoryPackageSpecAsPackageSerializer(cat_pkgs, many=True, context={"item_id": obj.id}).data
         return data
 

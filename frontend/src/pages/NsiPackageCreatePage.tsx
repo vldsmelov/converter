@@ -19,6 +19,7 @@ export default function NsiPackageCreatePage() {
   const [contentUom, setContentUom] = useState<number | null>(null);
   const [qty, setQty] = useState("25");
   const [status, setStatus] = useState<"active" | "draft">("active");
+  const [supplierCode, setSupplierCode] = useState("");
   const [makeDefaultField, setMakeDefaultField] = useState(false);
   const [defaultFieldCode, setDefaultFieldCode] = useState("");
   const [defaultFieldLabel, setDefaultFieldLabel] = useState("");
@@ -105,6 +106,7 @@ export default function NsiPackageCreatePage() {
           content_uom: contentUom,
           content_qty: qty,
           status,
+          supplier_code: supplierCode.trim(),
         },
       });
       nav("/nsi/packages");
@@ -153,6 +155,14 @@ export default function NsiPackageCreatePage() {
               <option value="active">active</option>
               <option value="draft">draft</option>
             </select>
+          </label>
+          <label>
+            <small>Поставщик (опционально)</small><br />
+            <input
+              value={supplierCode}
+              onChange={(e) => setSupplierCode(e.target.value)}
+              placeholder="например: Компания А"
+            />
           </label>
         </div>
 

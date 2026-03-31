@@ -276,7 +276,10 @@ def pick_package(
     on_date: date,
 ) -> dict:
     packages = item.get("packages") or []
-    candidates = []
+    requested_supplier = str(req.supplier_code or "").strip()
+    requested_supplier_fold = requested_supplier.casefold()
+    candidates_exact_supplier = []
+    candidates_generic = []
     for p in packages:
         if p.get("status") != "active":
             continue
@@ -298,12 +301,30 @@ def pick_package(
         # hints
         if req.barcode and p.get("barcode") and p["barcode"] != req.barcode:
             continue
-        if req.supplier_code and p.get("supplier_code") and p["supplier_code"] != req.supplier_code:
-            continue
+        supplier_code = str(p.get("supplier_code") or "").strip()
+        supplier_code_fold = supplier_code.casefold()
 
-        candidates.append(p)
+        if requested_supplier:
+            if supplier_code and supplier_code_fold != requested_supplier_fold:
+                continue
+        else:
+            # No supplier was selected, so we only use common package specs.
+            if supplier_code:
+                continue
+
+        if requested_supplier and supplier_code and supplier_code_fold == requested_supplier_fold:
+            candidates_exact_supplier.append(p)
+        else:
+            candidates_generic.append(p)
+
+    candidates = candidates_exact_supplier if candidates_exact_supplier else candidates_generic
 
     if not candidates:
+        if requested_supplier:
+            raise HTTPException(
+                status_code=422,
+                detail=f"No active package spec for {from_uom_code} on item {item['id']} (supplier={requested_supplier})",
+            )
         raise HTTPException(status_code=422, detail=f"No active package spec for {from_uom_code} on item {item['id']}")
 
     if len(candidates) > 1:
@@ -543,6 +564,11 @@ async def convert(
 
     # 4) РµСЃР»Рё РєР°С‚РµРіРѕСЂРёРё СЂР°Р·РЅС‹Рµ вЂ” РїСЂРёРјРµРЅРёС‚СЊ РїСЂР°РІРёР»Р° С‡РµСЂРµР· NSI match (BFS РґРѕ 2 РїСЂР°РІРёР»)
     if cur_cat != target_cat:
+        rule_context = dict(req.context or {})
+        if req.supplier_code:
+            rule_context["supplier_code"] = req.supplier_code
+        if req.barcode:
+            rule_context["barcode"] = req.barcode
         async with httpx.AsyncClient() as client:
             cur_qty_base, cur_cat = await find_category_path_and_convert(
                 client=client,
@@ -551,7 +577,7 @@ async def convert(
                 start_cat=cur_cat,
                 qty_base_start=cur_qty_base,
                 target_cat=target_cat,
-                context=req.context,
+                context=rule_context,
                 on_date=on_date,
                 steps=steps,
             )

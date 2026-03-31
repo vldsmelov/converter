@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import ConversionRule, Item, ItemPolicy, PackageSpec, UoM, UoMCategory
+from .models import ConversionRule, Counterparty, Item, ItemPolicy, PackageSpec, UoM, UoMCategory
 
 
 class PackageSpecInline(admin.TabularInline):
@@ -51,6 +51,14 @@ class UoMAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "category", "factor_to_base", "precision")
     list_filter = ("category",)
     search_fields = ("code", "name")
+
+
+@admin.register(Counterparty)
+class CounterpartyAdmin(admin.ModelAdmin):
+    list_display = ("id", "name", "is_active", "created_at")
+    list_filter = ("is_active",)
+    search_fields = ("name",)
+    ordering = ("name", "id")
 
 
 class ItemPolicyInline(admin.StackedInline):

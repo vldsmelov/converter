@@ -46,6 +46,36 @@ class Item(models.Model):
         return self.name
 
 
+class Counterparty(models.Model):
+    """Справочник контрагентов для единообразного выбора supplier_code в правилах/упаковках."""
+
+    name = models.CharField(max_length=160, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+        indexes = [
+            models.Index(fields=["is_active", "name"]),
+        ]
+
+    def clean(self):
+        normalized = str(self.name or "").strip()
+        if not normalized:
+            raise ValidationError({"name": "name is required"})
+        clash_qs = Counterparty.objects.filter(name__iexact=normalized).exclude(pk=self.pk)
+        if clash_qs.exists():
+            raise ValidationError({"name": "Counterparty with same name already exists"})
+        self.name = normalized
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class ItemPolicy(models.Model):
     item = models.OneToOneField(Item, on_delete=models.CASCADE, related_name="policy")
     storage_uom = models.ForeignKey(UoM, on_delete=models.PROTECT, related_name="storage_for_items")

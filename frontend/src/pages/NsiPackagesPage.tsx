@@ -73,13 +73,14 @@ export default function NsiPackagesPage() {
 
       <table style={{ marginTop: 12 }}>
         <thead>
-          <tr><th>ID</th><th>Позиция</th><th>Правило</th><th>Статус</th><th></th></tr>
+          <tr><th>ID</th><th>Позиция</th><th>Поставщик</th><th>Правило</th><th>Статус</th><th></th></tr>
         </thead>
         <tbody>
           {pkgs.map((p: any) => (
             <tr key={p.id}>
               <td>{p.id}</td>
               <td>{itemName(p.item)}</td>
+              <td>{String(p.supplier_code ?? "").trim() || "—"}</td>
               <td><span className="badge">1 {uomCode(p.package_uom)}</span> = <b>{p.content_qty}</b> {uomCode(p.content_uom)}</td>
               <td>{p.status}</td>
               <td style={{ textAlign: "right" }}>
@@ -90,7 +91,7 @@ export default function NsiPackagesPage() {
               </td>
             </tr>
           ))}
-          {pkgs.length === 0 && <tr><td colSpan={5}><small>Пока нет упаковок.</small></td></tr>}
+          {pkgs.length === 0 && <tr><td colSpan={6}><small>Пока нет упаковок.</small></td></tr>}
         </tbody>
       </table>
     </div>

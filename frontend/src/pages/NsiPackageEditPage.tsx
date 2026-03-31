@@ -156,6 +156,34 @@ export default function NsiPackageEditPage() {
               <option value="archived">archived</option>
             </select>
           </label>
+          <label>
+            <small>Поставщик (опционально)</small><br />
+            <input
+              value={supplierCode}
+              onChange={(e) => setSupplierCode(e.target.value)}
+              placeholder="например: Компания А"
+            />
+          </label>
+          <label>
+            <small>Штрихкод (опционально)</small><br />
+            <input value={barcode} onChange={(e) => setBarcode(e.target.value)} />
+          </label>
+          <label>
+            <small>Действует с</small><br />
+            <input
+              type="date"
+              value={effectiveFrom ?? ""}
+              onChange={(e) => setEffectiveFrom(e.target.value || null)}
+            />
+          </label>
+          <label>
+            <small>Действует по</small><br />
+            <input
+              type="date"
+              value={effectiveTo ?? ""}
+              onChange={(e) => setEffectiveTo(e.target.value || null)}
+            />
+          </label>
         </div>
 
         <div style={{ marginTop: 10 }}>
