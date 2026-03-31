@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import BrandLogo from "../components/BrandLogo";
 import { resolveHelpTopic } from "../lib/help";
 import AdminConsolePage from "./AdminConsolePage";
 import CreateInvoicePage from "./CreateInvoicePage";
@@ -87,7 +88,9 @@ export default function App() {
     <div className="container app-shell">
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
         <div className="row" style={{ gap: 16 }}>
-          <h2 style={{ margin: 0 }}>Конвертер</h2>
+          <Link to="/app" className="brand-link" aria-label="Главная">
+            <BrandLogo />
+          </Link>
 
           {PRIMARY_LINKS.map((l) => (
             <Link key={l.to} to={l.to}>{l.label}</Link>

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiError, requestJson } from "../api/request";
+import BrandLogo from "../components/BrandLogo";
 import PageHeader from "../components/PageHeader";
 
 type FeedbackCreateResponse = {
@@ -75,6 +76,9 @@ export default function PublicFeedbackPage() {
   return (
     <div className="container app-shell" style={{ paddingTop: 16 }}>
       <div className="card feedback-card">
+        <div className="row" style={{ marginBottom: 8 }}>
+          <BrandLogo compact />
+        </div>
         <PageHeader
           title="Обратная связь"
           subtitle="Сообщите об ошибке, предложении или вопросе. Авторизация не требуется."

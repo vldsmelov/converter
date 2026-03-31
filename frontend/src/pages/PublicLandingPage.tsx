@@ -1,11 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
+import BrandLogo from "../components/BrandLogo";
 
 export default function PublicLandingPage() {
   return (
     <div className="container app-shell" style={{ paddingTop: 28 }}>
-      <div className="card" style={{ maxWidth: 820, margin: "0 auto" }}>
-        <h2 style={{ marginTop: 0, marginBottom: 8 }}>Конвертер</h2>
+      <div className="card" style={{ maxWidth: 900, margin: "0 auto" }}>
+        <div className="row" style={{ marginBottom: 8 }}>
+          <BrandLogo />
+        </div>
         <p style={{ marginTop: 0 }}>
           Публичный доступ: быстрый расчет перевода ЕИ по уже настроенным данным системы.
         </p>

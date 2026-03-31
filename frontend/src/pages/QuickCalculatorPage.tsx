@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, requestJson } from "../api/request";
+import BrandLogo from "../components/BrandLogo";
 import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
@@ -362,6 +363,9 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
 
   return (
     <div className="card calculator-page">
+      <div className="row" style={{ justifyContent: "space-between", marginBottom: 8 }}>
+        <BrandLogo compact />
+      </div>
       <PageHeader
         title="Калькулятор конвертации"
         subtitle="Быстрый расчёт без создания накладной: выберите номенклатуру, ЕИ и количество."

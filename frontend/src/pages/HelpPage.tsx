@@ -1,5 +1,6 @@
 import React from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import BrandLogo from "../components/BrandLogo";
 import PageHeader from "../components/PageHeader";
 import { HELP_ARTICLES, HelpTopic } from "../lib/help";
 
@@ -34,6 +35,9 @@ export default function HelpPage() {
   return (
     <div className="container app-shell" style={{ paddingTop: 16 }}>
       <div className="card">
+        <div className="row" style={{ marginBottom: 8 }}>
+          <BrandLogo compact />
+        </div>
         <PageHeader
           title={article.title}
           subtitle={article.summary}
