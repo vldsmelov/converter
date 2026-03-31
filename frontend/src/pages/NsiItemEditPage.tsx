@@ -13,6 +13,7 @@ export default function NsiItemEditPage() {
 
   const [cats, setCats] = useState<any[]>([]);
   const [uoms, setUoms] = useState<any[]>([]);
+  const [existingItems, setExistingItems] = useState<Array<{ id: number; name: string }>>([]);
   const [item, setItem] = useState<any | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -34,19 +35,66 @@ export default function NsiItemEditPage() {
   const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
   const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "—");
   const catDefaultUom = (id: number | null | undefined) => (id ? (catById.get(id)?.default_uom ?? null) : null);
+  const normalizeName = (value: unknown) => String(value ?? "").trim().toLowerCase();
+  const exactNameDuplicate = useMemo(() => {
+    const needle = normalizeName(name);
+    if (!needle) return false;
+    return existingItems.some((it) => it.id !== itemId && normalizeName(it.name) === needle);
+  }, [existingItems, name, itemId]);
+  const nameSuggestions = useMemo(() => {
+    const needle = normalizeName(name);
+    const names = existingItems
+      .filter((it) => it.id !== itemId)
+      .map((it) => String(it.name ?? "").trim())
+      .filter(Boolean);
+    if (!needle) return names.slice(0, 10);
+    return names.filter((x) => normalizeName(x).includes(needle)).slice(0, 10);
+  }, [existingItems, name, itemId]);
+
+  function parseRows(payload: any): any[] {
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.results)) return payload.results;
+    return [];
+  }
+
+  async function loadAllItems(tokenValue: string): Promise<Array<{ id: number; name: string }>> {
+    const map = new Map<number, string>();
+    let nextUrl: string | null = `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/?limit=500`;
+    let pageGuard = 0;
+
+    while (nextUrl && pageGuard < 40) {
+      const payload: any = await requestJson({ method: "GET", url: nextUrl, token: tokenValue });
+      const rows = parseRows(payload);
+      for (const row of rows) {
+        const id = Number(row?.id ?? 0);
+        const nm = String(row?.name ?? "").trim();
+        if (id > 0 && nm) map.set(id, nm);
+      }
+      if (Array.isArray(payload)) break;
+      const rawNext: string = typeof payload?.next === "string" ? payload.next.trim() : "";
+      nextUrl = rawNext || null;
+      pageGuard += 1;
+    }
+
+    return Array.from(map.entries())
+      .map(([id, rowName]) => ({ id, name: rowName }))
+      .sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  }
 
   async function load() {
     if (!token) return;
     setErr(null);
     try {
-      const [u, c, it] = await Promise.all([
+      const [u, c, it, allItems] = await Promise.all([
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
         requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/${itemId}/`, token }),
+        loadAllItems(token).catch(() => []),
       ]);
       setUoms(u ?? []);
       setCats(c ?? []);
       setItem(it);
+      setExistingItems(allItems ?? []);
 
       setName(it.name ?? "");
       setCategoryId(it.category ?? null);
@@ -114,6 +162,10 @@ export default function NsiItemEditPage() {
     if (!token) return;
     if (!categoryId) { setErr("Выберите категорию."); return; }
     if (!storageUom) { setErr("Выберите единицу хранения."); return; }
+    if (exactNameDuplicate) {
+      setErr("Номенклатура с таким названием уже существует. Выберите существующую позицию или укажите другое имя.");
+      return;
+    }
     setErr(null);
     try {
       await requestJson({
@@ -169,7 +221,17 @@ export default function NsiItemEditPage() {
         <div className="row">
           <label style={{ flex: 1 }}>
             <small>Название товара</small><br />
-            <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ width: "100%" }}
+              list="item-edit-name-suggestions"
+              autoComplete="off"
+            />
+            <datalist id="item-edit-name-suggestions">
+              {nameSuggestions.map((s) => <option key={s} value={s} />)}
+            </datalist>
+            {exactNameDuplicate && <small style={{ color: "#fca5a5" }}>Такое название уже есть в справочнике.</small>}
           </label>
           <label>
             <small>Категория</small><br />
@@ -229,7 +291,7 @@ export default function NsiItemEditPage() {
 
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => nav("/nsi/items")}>Отмена</button>
-          <button className="btn primary" onClick={save}>Сохранить</button>
+          <button className="btn primary" onClick={save} disabled={exactNameDuplicate}>Сохранить</button>
           <div style={{ flex: 1 }} />
           <button className="btn" onClick={remove}>Удалить</button>
         </div>

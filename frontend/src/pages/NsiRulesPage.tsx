@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson } from "../api/request";
+import PageHeader from "../components/PageHeader";
+import { conditionLabel, ruleParamLabel, ruleTypeLabel } from "../lib/ruLabels";
 
 type Uom = any;
 type Item = any;
@@ -10,6 +12,92 @@ type GlobalRule = any;
 type CatPkg = any;
 type Rule = any;
 type RuleTab = "global" | "category" | "item";
+
+type GlobalColumnKey = "id" | "from_uom" | "to_uom" | "multiplier" | "status";
+type CategoryColumnKey = "id" | "category" | "rule" | "status";
+type ItemColumnKey = "id" | "item" | "type" | "conditions" | "params" | "status";
+type ColumnDef<T extends string> = { key: T; label: string; weight: number };
+
+const ACTIONS_WEIGHT = 18;
+const GLOBAL_COLUMNS_STORAGE_KEY = "nsi_rules_global_visible_columns_v1";
+const CATEGORY_COLUMNS_STORAGE_KEY = "nsi_rules_category_visible_columns_v1";
+const ITEM_COLUMNS_STORAGE_KEY = "nsi_rules_item_visible_columns_v1";
+
+const GLOBAL_COLUMNS: Array<ColumnDef<GlobalColumnKey>> = [
+  { key: "id", label: "ID", weight: 8 },
+  { key: "from_uom", label: "Из ЕИ", weight: 22 },
+  { key: "to_uom", label: "В ЕИ", weight: 22 },
+  { key: "multiplier", label: "Коэффициент", weight: 18 },
+  { key: "status", label: "Статус", weight: 12 },
+];
+
+const CATEGORY_COLUMNS: Array<ColumnDef<CategoryColumnKey>> = [
+  { key: "id", label: "ID", weight: 8 },
+  { key: "category", label: "Категория", weight: 26 },
+  { key: "rule", label: "Правило", weight: 38 },
+  { key: "status", label: "Статус", weight: 12 },
+];
+
+const ITEM_COLUMNS: Array<ColumnDef<ItemColumnKey>> = [
+  { key: "id", label: "ID", weight: 7 },
+  { key: "item", label: "Номенклатура", weight: 24 },
+  { key: "type", label: "Тип", weight: 12 },
+  { key: "conditions", label: "Условия", weight: 21 },
+  { key: "params", label: "Параметры", weight: 17 },
+  { key: "status", label: "Статус", weight: 8 },
+];
+
+const DEFAULT_GLOBAL_COLUMNS: Record<GlobalColumnKey, boolean> = {
+  id: true,
+  from_uom: true,
+  to_uom: true,
+  multiplier: true,
+  status: true,
+};
+
+const DEFAULT_CATEGORY_COLUMNS: Record<CategoryColumnKey, boolean> = {
+  id: true,
+  category: true,
+  rule: true,
+  status: true,
+};
+
+const DEFAULT_ITEM_COLUMNS: Record<ItemColumnKey, boolean> = {
+  id: true,
+  item: true,
+  type: true,
+  conditions: true,
+  params: true,
+  status: true,
+};
+
+function parseRows(payload: any): any[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.results)) return payload.results;
+  return [];
+}
+
+function readStoredVisibleColumns<T extends string>(
+  storageKey: string,
+  columns: Array<ColumnDef<T>>,
+  defaults: Record<T, boolean>
+): Record<T, boolean> {
+  try {
+    const raw = window.localStorage.getItem(storageKey);
+    if (!raw) return { ...defaults };
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return { ...defaults };
+    const next: Record<T, boolean> = { ...defaults };
+    columns.forEach((c) => {
+      const v = (parsed as Record<string, unknown>)[c.key];
+      if (typeof v === "boolean") next[c.key] = v;
+    });
+    if (!columns.some((c) => next[c.key])) return { ...defaults };
+    return next;
+  } catch {
+    return { ...defaults };
+  }
+}
 
 export default function NsiRulesPage() {
   const { token } = useAuth();
@@ -24,7 +112,22 @@ export default function NsiRulesPage() {
   const [rules, setRules] = useState<Rule[]>([]);
 
   const [activeTab, setActiveTab] = useState<RuleTab>("global");
+  const [qGlobal, setQGlobal] = useState("");
+  const [qCategory, setQCategory] = useState("");
+  const [qItem, setQItem] = useState("");
   const [err, setErr] = useState<string | null>(null);
+
+  const [globalColumns, setGlobalColumns] = useState<Record<GlobalColumnKey, boolean>>(
+    () => readStoredVisibleColumns(GLOBAL_COLUMNS_STORAGE_KEY, GLOBAL_COLUMNS, DEFAULT_GLOBAL_COLUMNS)
+  );
+  const [categoryColumns, setCategoryColumns] = useState<Record<CategoryColumnKey, boolean>>(
+    () => readStoredVisibleColumns(CATEGORY_COLUMNS_STORAGE_KEY, CATEGORY_COLUMNS, DEFAULT_CATEGORY_COLUMNS)
+  );
+  const [itemColumns, setItemColumns] = useState<Record<ItemColumnKey, boolean>>(
+    () => readStoredVisibleColumns(ITEM_COLUMNS_STORAGE_KEY, ITEM_COLUMNS, DEFAULT_ITEM_COLUMNS)
+  );
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const columnsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
   const uomCode = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-");
@@ -35,15 +138,39 @@ export default function NsiRulesPage() {
   const itemById = useMemo(() => new Map<number, any>(items.map((i: any) => [i.id, i])), [items]);
   const itemRules = useMemo(() => rules.filter((r: any) => !!r.item), [rules]);
 
+  useEffect(() => {
+    window.localStorage.setItem(GLOBAL_COLUMNS_STORAGE_KEY, JSON.stringify(globalColumns));
+  }, [globalColumns]);
+
+  useEffect(() => {
+    window.localStorage.setItem(CATEGORY_COLUMNS_STORAGE_KEY, JSON.stringify(categoryColumns));
+  }, [categoryColumns]);
+
+  useEffect(() => {
+    window.localStorage.setItem(ITEM_COLUMNS_STORAGE_KEY, JSON.stringify(itemColumns));
+  }, [itemColumns]);
+
+  useEffect(() => {
+    if (!columnsMenuOpen) return;
+    const onPointerDown = (ev: MouseEvent) => {
+      if (!columnsMenuRef.current) return;
+      const target = ev.target as Node | null;
+      if (target && columnsMenuRef.current.contains(target)) return;
+      setColumnsMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [columnsMenuOpen]);
+
   function formatRuleParams(rule: any): string {
     const params = rule?.params ?? {};
-    const pairs = Object.entries(params).map(([k, v]) => `${k}=${v}`);
+    const pairs = Object.entries(params).map(([k, v]) => `${ruleParamLabel(k)}=${v}`);
     return pairs.length > 0 ? pairs.join(", ") : "-";
   }
 
   function formatRuleConditions(rule: any): string {
     const conditions = rule?.conditions ?? {};
-    const pairs = Object.entries(conditions).map(([k, v]) => `${k}=${v}`);
+    const pairs = Object.entries(conditions).map(([k, v]) => `${conditionLabel(k)}=${v}`);
     return pairs.length > 0 ? pairs.join(", ") : "общие";
   }
 
@@ -51,21 +178,21 @@ export default function NsiRulesPage() {
     if (!token) return;
     setErr(null);
     try {
-      const [u, it, ic, gr, cp, rl] = await Promise.all([
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/global-uom-rules/`, token }).catch(() => []),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/category-packages/`, token }).catch(() => []),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`, token }),
+      const [uRaw, itRaw, icRaw, grRaw, cpRaw, rlRaw] = await Promise.all([
+        requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
+        requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
+        requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
+        requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/global-uom-rules/`, token }).catch(() => []),
+        requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/category-packages/`, token }).catch(() => []),
+        requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`, token }),
       ]);
 
-      setUoms(u ?? []);
-      setItems(it ?? []);
-      setItemCats(ic ?? []);
-      setGlobalRules(gr ?? []);
-      setCatPkgs(cp ?? []);
-      setRules(rl ?? []);
+      setUoms(parseRows(uRaw));
+      setItems(parseRows(itRaw));
+      setItemCats(parseRows(icRaw));
+      setGlobalRules(parseRows(grRaw));
+      setCatPkgs(parseRows(cpRaw));
+      setRules(parseRows(rlRaw));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
@@ -124,21 +251,157 @@ export default function NsiRulesPage() {
     }
   }
 
+  function renderStatus(status: unknown) {
+    const isActive = String(status ?? "").toLowerCase() === "active";
+    return (
+      <span
+        className={`nsi-status-icon ${isActive ? "active" : "inactive"}`}
+        title={isActive ? "Активно" : "Неактивно"}
+        aria-label={isActive ? "Активно" : "Неактивно"}
+      >
+        {isActive ? "✓" : "✕"}
+      </span>
+    );
+  }
+
+  const filteredGlobal = useMemo(() => {
+    const qq = qGlobal.trim().toLowerCase();
+    if (!qq) return globalRules;
+    return globalRules.filter((r: any) => {
+      const s = `${r.id ?? ""} ${uomCode(r.from_uom)} ${uomCode(r.to_uom)} ${r.multiplier ?? ""} ${r.status ?? ""}`.toLowerCase();
+      return s.includes(qq);
+    });
+  }, [globalRules, qGlobal, uomById]);
+
+  const filteredCategory = useMemo(() => {
+    const qq = qCategory.trim().toLowerCase();
+    if (!qq) return catPkgs;
+    return catPkgs.filter((p: any) => {
+      const ruleText = `1 ${uomCode(p.package_uom)} ${p.content_qty ?? ""} ${uomCode(p.content_uom)}`;
+      const s = `${p.id ?? ""} ${itemCatName(p.category)} ${ruleText} ${p.status ?? ""}`.toLowerCase();
+      return s.includes(qq);
+    });
+  }, [catPkgs, qCategory, itemCatById, uomById]);
+
+  const filteredItem = useMemo(() => {
+    const qq = qItem.trim().toLowerCase();
+    if (!qq) return itemRules;
+    return itemRules.filter((r: any) => {
+      const itemName = String(itemById.get(r.item)?.name ?? r.item ?? "");
+      const s = `${r.id ?? ""} ${itemName} ${ruleTypeLabel(r.rule_type)} ${formatRuleConditions(r)} ${formatRuleParams(r)} ${r.status ?? ""}`.toLowerCase();
+      return s.includes(qq);
+    });
+  }, [itemRules, qItem, itemById]);
+
+  const visibleGlobalColumns = useMemo(
+    () => GLOBAL_COLUMNS.filter((c) => globalColumns[c.key]),
+    [globalColumns]
+  );
+  const visibleCategoryColumns = useMemo(
+    () => CATEGORY_COLUMNS.filter((c) => categoryColumns[c.key]),
+    [categoryColumns]
+  );
+  const visibleItemColumns = useMemo(
+    () => ITEM_COLUMNS.filter((c) => itemColumns[c.key]),
+    [itemColumns]
+  );
+
+  const totalGlobalWeight = useMemo(
+    () => visibleGlobalColumns.reduce((sum, c) => sum + c.weight, 0) + ACTIONS_WEIGHT,
+    [visibleGlobalColumns]
+  );
+  const totalCategoryWeight = useMemo(
+    () => visibleCategoryColumns.reduce((sum, c) => sum + c.weight, 0) + ACTIONS_WEIGHT,
+    [visibleCategoryColumns]
+  );
+  const totalItemWeight = useMemo(
+    () => visibleItemColumns.reduce((sum, c) => sum + c.weight, 0) + ACTIONS_WEIGHT,
+    [visibleItemColumns]
+  );
+
+  function setGlobalColumnVisible(key: GlobalColumnKey, nextValue: boolean) {
+    setGlobalColumns((prev) => {
+      if (!nextValue) {
+        const visibleCount = GLOBAL_COLUMNS.filter((c) => prev[c.key]).length;
+        if (visibleCount <= 1 && prev[key]) return prev;
+      }
+      return { ...prev, [key]: nextValue };
+    });
+  }
+
+  function setCategoryColumnVisible(key: CategoryColumnKey, nextValue: boolean) {
+    setCategoryColumns((prev) => {
+      if (!nextValue) {
+        const visibleCount = CATEGORY_COLUMNS.filter((c) => prev[c.key]).length;
+        if (visibleCount <= 1 && prev[key]) return prev;
+      }
+      return { ...prev, [key]: nextValue };
+    });
+  }
+
+  function setItemColumnVisible(key: ItemColumnKey, nextValue: boolean) {
+    setItemColumns((prev) => {
+      if (!nextValue) {
+        const visibleCount = ITEM_COLUMNS.filter((c) => prev[c.key]).length;
+        if (visibleCount <= 1 && prev[key]) return prev;
+      }
+      return { ...prev, [key]: nextValue };
+    });
+  }
+
+  function resetColumnsForActiveTab() {
+    if (activeTab === "global") setGlobalColumns({ ...DEFAULT_GLOBAL_COLUMNS });
+    if (activeTab === "category") setCategoryColumns({ ...DEFAULT_CATEGORY_COLUMNS });
+    if (activeTab === "item") setItemColumns({ ...DEFAULT_ITEM_COLUMNS });
+  }
+
+  function renderGlobalCell(r: any, key: GlobalColumnKey): React.ReactNode {
+    if (key === "id") return <span className="mono-cell">{r.id}</span>;
+    if (key === "from_uom") return <span className="badge">{uomCode(r.from_uom)}</span>;
+    if (key === "to_uom") return <span className="badge">{uomCode(r.to_uom)}</span>;
+    if (key === "multiplier") return <span className="mono-cell">{r.multiplier}</span>;
+    return renderStatus(r.status);
+  }
+
+  function renderCategoryCell(r: any, key: CategoryColumnKey): React.ReactNode {
+    if (key === "id") return <span className="mono-cell">{r.id}</span>;
+    if (key === "category") return <span title={itemCatName(r.category)}>{itemCatName(r.category)}</span>;
+    if (key === "rule") {
+      return (
+        <span className="multiline-cell">
+          <span className="badge">1 {uomCode(r.package_uom)}</span> = <b>{r.content_qty}</b> {uomCode(r.content_uom)}
+        </span>
+      );
+    }
+    return renderStatus(r.status);
+  }
+
+  function renderItemCell(r: any, key: ItemColumnKey): React.ReactNode {
+    if (key === "id") return <span className="mono-cell">{r.id}</span>;
+    if (key === "item") {
+      const itemName = itemById.get(r.item)?.name ?? r.item;
+      return <span title={String(itemName ?? "")}>{String(itemName ?? "-")}</span>;
+    }
+    if (key === "type") return <span className="badge">{ruleTypeLabel(r.rule_type)}</span>;
+    if (key === "conditions") return <span className="multiline-cell">{formatRuleConditions(r)}</span>;
+    if (key === "params") return <span className="multiline-cell">{formatRuleParams(r)}</span>;
+    return renderStatus(r.status);
+  }
+
   return (
     <div className="card">
-      <div className="row" style={{ justifyContent: "space-between" }}>
-        <h3 style={{ margin: 0 }}>НСИ: Правила</h3>
-        <div className="row" style={{ gap: 8 }}>
-          <button className="btn" onClick={load}>Обновить</button>
-          <button className="btn primary" onClick={() => nav("/nsi/rules/new")}>
-            Создать новое правило
-          </button>
-        </div>
-      </div>
-
-      <p style={{ marginTop: 8 }}>
-        Здесь отображаются <b>только созданные правила</b>. Для создания используйте кнопку <b>«Создать новое правило»</b>.
-      </p>
+      <PageHeader
+        title="НСИ: Правила"
+        subtitle="Список правил конвертации по уровням: глобальные, категории и номенклатура."
+        right={
+          <>
+            <button className="btn" onClick={load}>Обновить</button>
+            <button className="btn primary" onClick={() => nav("/nsi/rules/new")}>
+              Создать новое правило
+            </button>
+          </>
+        }
+      />
 
       <div className="row" style={{ marginTop: 12 }}>
         <button className={activeTab === "global" ? "btn primary" : "btn"} onClick={() => setActiveTab("global")}>Глобальные</button>
@@ -150,88 +413,292 @@ export default function NsiRulesPage() {
 
       {activeTab === "global" && (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ marginTop: 0 }}>Глобальные правила (для всех)</h4>
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Из ЕИ</th><th>В ЕИ</th><th>Коэффициент</th><th>Статус</th><th></th></tr>
-            </thead>
-            <tbody>
-              {globalRules.map((r: any) => (
-                <tr key={r.id}>
-                  <td>{r.id}</td>
-                  <td>{uomCode(r.from_uom)}</td>
-                  <td>{uomCode(r.to_uom)}</td>
-                  <td>{r.multiplier}</td>
-                  <td>{r.status}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <div className="row" style={{ justifyContent: "flex-end" }}>
-                      <button className="btn" onClick={() => nav(`/nsi/rules/global/${r.id}/edit`)}>Редактировать</button>
-                      <button className="btn" onClick={() => removeGlobalRule(r.id)}>Удалить</button>
+          <h4 style={{ marginTop: 0 }}>Глобальные правила</h4>
+          <div className="card" style={{ marginTop: 8 }}>
+            <div className="row nsi-rules-filter-row">
+              <label style={{ flex: 1, minWidth: 260 }}>
+                <small>Поиск</small><br />
+                <input value={qGlobal} onChange={(e) => setQGlobal(e.target.value)} style={{ width: "100%" }} placeholder="ID, ЕИ, коэффициент, статус" />
+              </label>
+              <div className="nsi-rules-columns-menu" ref={columnsMenuRef}>
+                <button
+                  type="button"
+                  className="btn icon-btn"
+                  title="Поля таблицы"
+                  aria-label="Поля таблицы"
+                  aria-expanded={columnsMenuOpen}
+                  onClick={() => setColumnsMenuOpen((v) => !v)}
+                >
+                  ⚙
+                </button>
+                {columnsMenuOpen && (
+                  <div className="nsi-rules-columns-dropdown">
+                    <small><strong>Отображаемые поля</strong></small>
+                    {GLOBAL_COLUMNS.map((c) => {
+                      const checked = globalColumns[c.key];
+                      const isLastVisible = checked && visibleGlobalColumns.length === 1;
+                      return (
+                        <label key={c.key} className="nsi-rules-columns-option">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={isLastVisible}
+                            onChange={(e) => setGlobalColumnVisible(c.key, e.target.checked)}
+                          />
+                          <span>{c.label}</span>
+                        </label>
+                      );
+                    })}
+                    <div className="row" style={{ justifyContent: "flex-end", marginTop: 6 }}>
+                      <button className="btn btn-tight" type="button" onClick={resetColumnsForActiveTab}>Все поля</button>
                     </div>
-                  </td>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="table-wrap nsi-rules-table-wrap" style={{ marginTop: 8 }}>
+            <table className="compact-table nsi-rules-table">
+              <colgroup>
+                {visibleGlobalColumns.map((c) => (
+                  <col key={c.key} style={{ width: `${(c.weight / totalGlobalWeight) * 100}%` }} />
+                ))}
+                <col style={{ width: `${(ACTIONS_WEIGHT / totalGlobalWeight) * 100}%` }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  {visibleGlobalColumns.map((c) => <th key={c.key}>{c.label}</th>)}
+                  <th className="nsi-actions-col">Действия</th>
                 </tr>
-              ))}
-              {globalRules.length === 0 && <tr><td colSpan={6}><small>Пока нет глобальных правил.</small></td></tr>}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredGlobal.map((r: any) => (
+                  <tr key={r.id}>
+                    {visibleGlobalColumns.map((c) => <td key={c.key}>{renderGlobalCell(r, c.key)}</td>)}
+                    <td className="nsi-actions-col">
+                      <div className="row nsi-table-actions">
+                        <button
+                          className="btn btn-tight nsi-action-icon"
+                          onClick={() => nav(`/nsi/rules/global/${r.id}/edit`)}
+                          title="Редактировать"
+                          aria-label="Редактировать"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="btn btn-tight danger nsi-action-icon"
+                          onClick={() => removeGlobalRule(r.id)}
+                          title="Удалить"
+                          aria-label="Удалить"
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredGlobal.length === 0 && (
+                  <tr>
+                    <td colSpan={visibleGlobalColumns.length + 1} className="empty-row"><small>Ничего не найдено.</small></td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {activeTab === "category" && (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ marginTop: 0 }}>Правила для категории (упаковки)</h4>
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Категория</th><th>Правило</th><th>Статус</th><th></th></tr>
-            </thead>
-            <tbody>
-              {catPkgs.map((p: any) => (
-                <tr key={p.id}>
-                  <td>{p.id}</td>
-                  <td>{itemCatName(p.category)}</td>
-                  <td><span className="badge">1 {uomCode(p.package_uom)}</span> = <b>{p.content_qty}</b> {uomCode(p.content_uom)}</td>
-                  <td>{p.status}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <div className="row" style={{ justifyContent: "flex-end" }}>
-                      <button className="btn" onClick={() => nav(`/nsi/rules/category/${p.id}/edit`)}>Редактировать</button>
-                      <button className="btn" onClick={() => removeCategoryRule(p.id)}>Удалить</button>
+          <h4 style={{ marginTop: 0 }}>Правила категорий</h4>
+          <div className="card" style={{ marginTop: 8 }}>
+            <div className="row nsi-rules-filter-row">
+              <label style={{ flex: 1, minWidth: 260 }}>
+                <small>Поиск</small><br />
+                <input value={qCategory} onChange={(e) => setQCategory(e.target.value)} style={{ width: "100%" }} placeholder="ID, категория, ЕИ, статус" />
+              </label>
+              <div className="nsi-rules-columns-menu" ref={columnsMenuRef}>
+                <button
+                  type="button"
+                  className="btn icon-btn"
+                  title="Поля таблицы"
+                  aria-label="Поля таблицы"
+                  aria-expanded={columnsMenuOpen}
+                  onClick={() => setColumnsMenuOpen((v) => !v)}
+                >
+                  ⚙
+                </button>
+                {columnsMenuOpen && (
+                  <div className="nsi-rules-columns-dropdown">
+                    <small><strong>Отображаемые поля</strong></small>
+                    {CATEGORY_COLUMNS.map((c) => {
+                      const checked = categoryColumns[c.key];
+                      const isLastVisible = checked && visibleCategoryColumns.length === 1;
+                      return (
+                        <label key={c.key} className="nsi-rules-columns-option">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={isLastVisible}
+                            onChange={(e) => setCategoryColumnVisible(c.key, e.target.checked)}
+                          />
+                          <span>{c.label}</span>
+                        </label>
+                      );
+                    })}
+                    <div className="row" style={{ justifyContent: "flex-end", marginTop: 6 }}>
+                      <button className="btn btn-tight" type="button" onClick={resetColumnsForActiveTab}>Все поля</button>
                     </div>
-                  </td>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="table-wrap nsi-rules-table-wrap" style={{ marginTop: 8 }}>
+            <table className="compact-table nsi-rules-table">
+              <colgroup>
+                {visibleCategoryColumns.map((c) => (
+                  <col key={c.key} style={{ width: `${(c.weight / totalCategoryWeight) * 100}%` }} />
+                ))}
+                <col style={{ width: `${(ACTIONS_WEIGHT / totalCategoryWeight) * 100}%` }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  {visibleCategoryColumns.map((c) => <th key={c.key}>{c.label}</th>)}
+                  <th className="nsi-actions-col">Действия</th>
                 </tr>
-              ))}
-              {catPkgs.length === 0 && <tr><td colSpan={5}><small>Пока нет правил для категорий.</small></td></tr>}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredCategory.map((p: any) => (
+                  <tr key={p.id}>
+                    {visibleCategoryColumns.map((c) => <td key={c.key}>{renderCategoryCell(p, c.key)}</td>)}
+                    <td className="nsi-actions-col">
+                      <div className="row nsi-table-actions">
+                        <button
+                          className="btn btn-tight nsi-action-icon"
+                          onClick={() => nav(`/nsi/rules/category/${p.id}/edit`)}
+                          title="Редактировать"
+                          aria-label="Редактировать"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="btn btn-tight danger nsi-action-icon"
+                          onClick={() => removeCategoryRule(p.id)}
+                          title="Удалить"
+                          aria-label="Удалить"
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredCategory.length === 0 && (
+                  <tr>
+                    <td colSpan={visibleCategoryColumns.length + 1} className="empty-row"><small>Ничего не найдено.</small></td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
       {activeTab === "item" && (
         <div className="card" style={{ marginTop: 12 }}>
-          <h4 style={{ marginTop: 0 }}>Правила для номенклатуры</h4>
-          <table>
-            <thead>
-              <tr><th>ID</th><th>Номенклатура</th><th>Тип</th><th>Условия</th><th>Параметры</th><th>Статус</th><th></th></tr>
-            </thead>
-            <tbody>
-              {itemRules.map((r: any) => (
-                <tr key={r.id}>
-                  <td>{r.id}</td>
-                  <td>{itemById.get(r.item)?.name ?? r.item}</td>
-                  <td>{r.rule_type}</td>
-                  <td>{formatRuleConditions(r)}</td>
-                  <td>{formatRuleParams(r)}</td>
-                  <td>{r.status}</td>
-                  <td style={{ textAlign: "right" }}>
-                    <div className="row" style={{ justifyContent: "flex-end" }}>
-                      <button className="btn" onClick={() => nav(`/nsi/rules/item/${r.id}/edit`)}>Редактировать</button>
-                      <button className="btn" onClick={() => removeItemRule(r.id)}>Удалить</button>
+          <h4 style={{ marginTop: 0 }}>Правила номенклатуры</h4>
+          <div className="card" style={{ marginTop: 8 }}>
+            <div className="row nsi-rules-filter-row">
+              <label style={{ flex: 1, minWidth: 260 }}>
+                <small>Поиск</small><br />
+                <input value={qItem} onChange={(e) => setQItem(e.target.value)} style={{ width: "100%" }} placeholder="ID, номенклатура, тип, условия, параметры" />
+              </label>
+              <div className="nsi-rules-columns-menu" ref={columnsMenuRef}>
+                <button
+                  type="button"
+                  className="btn icon-btn"
+                  title="Поля таблицы"
+                  aria-label="Поля таблицы"
+                  aria-expanded={columnsMenuOpen}
+                  onClick={() => setColumnsMenuOpen((v) => !v)}
+                >
+                  ⚙
+                </button>
+                {columnsMenuOpen && (
+                  <div className="nsi-rules-columns-dropdown">
+                    <small><strong>Отображаемые поля</strong></small>
+                    {ITEM_COLUMNS.map((c) => {
+                      const checked = itemColumns[c.key];
+                      const isLastVisible = checked && visibleItemColumns.length === 1;
+                      return (
+                        <label key={c.key} className="nsi-rules-columns-option">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={isLastVisible}
+                            onChange={(e) => setItemColumnVisible(c.key, e.target.checked)}
+                          />
+                          <span>{c.label}</span>
+                        </label>
+                      );
+                    })}
+                    <div className="row" style={{ justifyContent: "flex-end", marginTop: 6 }}>
+                      <button className="btn btn-tight" type="button" onClick={resetColumnsForActiveTab}>Все поля</button>
                     </div>
-                  </td>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="table-wrap nsi-rules-table-wrap" style={{ marginTop: 8 }}>
+            <table className="compact-table nsi-rules-table">
+              <colgroup>
+                {visibleItemColumns.map((c) => (
+                  <col key={c.key} style={{ width: `${(c.weight / totalItemWeight) * 100}%` }} />
+                ))}
+                <col style={{ width: `${(ACTIONS_WEIGHT / totalItemWeight) * 100}%` }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  {visibleItemColumns.map((c) => <th key={c.key}>{c.label}</th>)}
+                  <th className="nsi-actions-col">Действия</th>
                 </tr>
-              ))}
-              {itemRules.length === 0 && <tr><td colSpan={7}><small>Пока нет правил по номенклатуре.</small></td></tr>}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filteredItem.map((r: any) => (
+                  <tr key={r.id}>
+                    {visibleItemColumns.map((c) => <td key={c.key}>{renderItemCell(r, c.key)}</td>)}
+                    <td className="nsi-actions-col">
+                      <div className="row nsi-table-actions">
+                        <button
+                          className="btn btn-tight nsi-action-icon"
+                          onClick={() => nav(`/nsi/rules/item/${r.id}/edit`)}
+                          title="Редактировать"
+                          aria-label="Редактировать"
+                        >
+                          ✎
+                        </button>
+                        <button
+                          className="btn btn-tight danger nsi-action-icon"
+                          onClick={() => removeItemRule(r.id)}
+                          title="Удалить"
+                          aria-label="Удалить"
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filteredItem.length === 0 && (
+                  <tr>
+                    <td colSpan={visibleItemColumns.length + 1} className="empty-row"><small>Ничего не найдено.</small></td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

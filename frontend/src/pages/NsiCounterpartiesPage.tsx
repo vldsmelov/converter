@@ -65,6 +65,20 @@ export default function NsiCounterpartiesPage() {
     if (!needle) return false;
     return rows.some((r) => normalizeName(r.name) === needle);
   }, [rows, newName]);
+  const editNameSuggestions = useMemo(() => {
+    const needle = normalizeName(editName);
+    const names = rows
+      .filter((r) => r.id !== editId)
+      .map((r) => r.name)
+      .filter((x) => String(x ?? "").trim());
+    if (!needle) return names.slice(0, 10);
+    return names.filter((x) => normalizeName(x).includes(needle)).slice(0, 10);
+  }, [rows, editName, editId]);
+  const editNameDuplicateExact = useMemo(() => {
+    const needle = normalizeName(editName);
+    if (!needle) return false;
+    return rows.some((r) => r.id !== editId && normalizeName(r.name) === needle);
+  }, [rows, editName, editId]);
 
   function openCreateModal() {
     setNewName("");
@@ -118,6 +132,10 @@ export default function NsiCounterpartiesPage() {
     const name = editName.trim();
     if (!name) {
       setErr("Укажите название контрагента.");
+      return;
+    }
+    if (editNameDuplicateExact) {
+      setErr("Контрагент с таким названием уже существует. Укажите другое имя.");
       return;
     }
     setErr(null);
@@ -197,7 +215,19 @@ export default function NsiCounterpartiesPage() {
                   <td>{r.id}</td>
                   <td>
                     {editing ? (
-                      <input value={editName} onChange={(e) => setEditName(e.target.value)} style={{ width: "100%" }} />
+                      <>
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          style={{ width: "100%" }}
+                          list="counterparty-edit-name-suggestions"
+                          autoComplete="off"
+                        />
+                        <datalist id="counterparty-edit-name-suggestions">
+                          {editNameSuggestions.map((s) => <option key={s} value={s} />)}
+                        </datalist>
+                        {editNameDuplicateExact && <small style={{ color: "#fca5a5" }}>Такое название уже есть в справочнике.</small>}
+                      </>
                     ) : (
                       r.name
                     )}
@@ -216,7 +246,7 @@ export default function NsiCounterpartiesPage() {
                     {editing ? (
                       <div className="row" style={{ justifyContent: "flex-end", gap: 6 }}>
                         <button className="btn btn-tight" onClick={cancelEdit}>Отмена</button>
-                        <button className="btn btn-tight primary" onClick={saveEdit}>Сохранить</button>
+                        <button className="btn btn-tight primary" onClick={saveEdit} disabled={editNameDuplicateExact}>Сохранить</button>
                       </div>
                     ) : (
                       <div className="row" style={{ justifyContent: "flex-end", gap: 6 }}>

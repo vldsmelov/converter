@@ -546,6 +546,80 @@ small { color: var(--muted); }
   background: rgba(220, 38, 38, 0.14);
 }
 
+.nsi-rules-table-wrap {
+  max-height: 72vh;
+}
+
+.nsi-rules-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.nsi-rules-table th,
+.nsi-rules-table td {
+  padding: 4px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.nsi-rules-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--table-head-bg);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.nsi-rules-table .mono-cell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.nsi-rules-table .multiline-cell {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.2;
+}
+
+.nsi-rules-filter-row {
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.nsi-rules-columns-menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.nsi-rules-columns-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 240px;
+  padding: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 14px 34px rgba(2, 6, 23, 0.35);
+  z-index: 25;
+}
+
+.nsi-rules-columns-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 2px;
+  font-size: 13px;
+}
+
+.nsi-rules-columns-option input {
+  width: auto;
+}
+
 .invoice-table .name-cell {
   min-width: 240px;
   white-space: normal;
