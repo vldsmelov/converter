@@ -23,26 +23,25 @@ import NsiRulesWizardPage from "./NsiRulesWizardPage";
 import NsiUomCreatePage from "./NsiUomCreatePage";
 import NsiUomEditPage from "./NsiUomEditPage";
 import NsiUomsPage from "./NsiUomsPage";
-import QuickCalculatorPage from "./QuickCalculatorPage";
 import PublicFeedbackPage from "./PublicFeedbackPage";
+import QuickCalculatorPage from "./QuickCalculatorPage";
 
 type NavLinkItem = {
   to: string;
   label: string;
 };
 
-const PRIMARY_LINKS: NavLinkItem[] = [
-  { to: "/app", label: "Накладные" },
-  { to: "/create", label: "Создать" },
-  { to: "/calculator", label: "Калькулятор" },
+const INVOICE_LINKS: NavLinkItem[] = [
+  { to: "/app", label: "Реестр накладных" },
+  { to: "/create", label: "Создать накладную" },
 ];
 
-const NSI_LINKS: NavLinkItem[] = [
-  { to: "/nsi/uoms", label: "ЕИ" },
-  { to: "/nsi/item-categories", label: "Категории" },
+const DIRECTORY_LINKS: NavLinkItem[] = [
   { to: "/nsi/items", label: "Номенклатура" },
+  { to: "/nsi/item-categories", label: "Категории" },
+  { to: "/nsi/uoms", label: "Единицы измерения" },
   { to: "/nsi/packages", label: "Упаковки" },
-  { to: "/nsi/rules", label: "Правила" },
+  { to: "/nsi/rules", label: "Правила конвертации" },
 ];
 
 export default function App() {
@@ -86,31 +85,61 @@ export default function App() {
 
   return (
     <div className="container app-shell">
-      <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-        <div className="row" style={{ gap: 16 }}>
+      <header className="app-topbar">
+        <div className="topbar-left">
           <Link to="/app" className="brand-link" aria-label="Главная">
             <BrandLogo />
           </Link>
 
-          {PRIMARY_LINKS.map((l) => (
-            <Link key={l.to} to={l.to}>{l.label}</Link>
-          ))}
+          <div className="nav-cluster">
+            <div className="nav-dropdown">
+              <button type="button" className="nav-pill dropdown-trigger">
+                Накладные
+              </button>
+              <div className="nav-dropdown-menu">
+                {INVOICE_LINKS.map((l) => (
+                  <Link key={l.to} to={l.to} className="nav-dropdown-item">
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
 
-          <span className="badge">НСИ</span>
+            <Link className="btn primary nav-cta" to="/nsi/items/new">
+              Добавить номенклатуру
+            </Link>
 
-          {NSI_LINKS.map((l) => (
-            <Link key={l.to} to={l.to}>{l.label}</Link>
-          ))}
+            <div className="nav-dropdown">
+              <button type="button" className="nav-pill dropdown-trigger">
+                Справочники
+              </button>
+              <div className="nav-dropdown-menu">
+                {DIRECTORY_LINKS.map((l) => (
+                  <Link key={l.to} to={l.to} className="nav-dropdown-item">
+                    {l.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
 
-          <a href={`${import.meta.env.VITE_DOCS_BASE_URL}/api/docs/`} target="_blank" rel="noreferrer">
-            Docs API
-          </a>
-          <a href={`${import.meta.env.VITE_NSI_BASE_URL}/api/docs/`} target="_blank" rel="noreferrer">
-            NSI API
-          </a>
+            <Link className="nav-pill" to="/calculator">
+              Калькулятор
+            </Link>
+          </div>
         </div>
 
-        <div className="row" style={{ gap: 8 }}>
+        <div className="topbar-right">
+          {isAdmin && (
+            <>
+              <a className="nav-pill" href={`${import.meta.env.VITE_DOCS_BASE_URL}/api/docs/`} target="_blank" rel="noreferrer">
+                Docs API
+              </a>
+              <a className="nav-pill" href={`${import.meta.env.VITE_NSI_BASE_URL}/api/docs/`} target="_blank" rel="noreferrer">
+                NSI API
+              </a>
+            </>
+          )}
+
           <Link className="btn btn-tight" to={helpUrl}>Инструкция</Link>
           <Link className="btn btn-tight" to={canReadFeedback ? "/feedback/inbox" : "/feedback"}>
             Обратная связь
@@ -133,15 +162,15 @@ export default function App() {
             title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
             aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
           >
-            {theme === "dark" ? "☀" : "☾"}
+            {theme === "dark" ? "\u2600" : "\u263E"}
           </button>
 
-          <small>{keycloak.tokenParsed?.preferred_username}</small>
+          <small className="topbar-user">{keycloak.tokenParsed?.preferred_username}</small>
           <button className="btn" onClick={() => keycloak.logout({ redirectUri: window.location.origin })}>
             Выйти
           </button>
         </div>
-      </div>
+      </header>
 
       <div className="app-main">
         <Routes>
