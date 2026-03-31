@@ -11,6 +11,7 @@ export default function NsiItemCreatePage() {
 
   const [cats, setCats] = useState<any[]>([]);
   const [uoms, setUoms] = useState<any[]>([]);
+  const [existingItemNames, setExistingItemNames] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   const [name, setName] = useState("Новый товар");
@@ -40,17 +41,60 @@ export default function NsiItemCreatePage() {
   const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
   const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "—");
   const catDefaultUom = (id: number | null | undefined) => (id ? (catById.get(id)?.default_uom ?? null) : null);
+  const normalizeName = (value: unknown) => String(value ?? "").trim().toLowerCase();
+  const exactNameDuplicate = useMemo(() => {
+    const needle = normalizeName(name);
+    if (!needle) return false;
+    return existingItemNames.some((n) => normalizeName(n) === needle);
+  }, [name, existingItemNames]);
+  const nameSuggestions = useMemo(() => {
+    const needle = normalizeName(name);
+    if (!needle) return existingItemNames.slice(0, 10);
+    return existingItemNames
+      .filter((x) => normalizeName(x).includes(needle))
+      .slice(0, 10);
+  }, [name, existingItemNames]);
+
+  function parseRows(payload: any): any[] {
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.results)) return payload.results;
+    return [];
+  }
+
+  async function loadAllItemNames(tokenValue: string): Promise<string[]> {
+    const bag = new Set<string>();
+    let nextUrl: string | null = `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/?limit=500`;
+    let pageGuard = 0;
+
+    while (nextUrl && pageGuard < 40) {
+      const payload: any = await requestJson({ method: "GET", url: nextUrl, token: tokenValue });
+      const rows = parseRows(payload);
+      for (const row of rows) {
+        const nm = String(row?.name ?? "").trim();
+        if (nm) bag.add(nm);
+      }
+
+      if (Array.isArray(payload)) break;
+      const rawNext: string = typeof payload?.next === "string" ? payload.next.trim() : "";
+      nextUrl = rawNext || null;
+      pageGuard += 1;
+    }
+
+    return Array.from(bag).sort((a, b) => a.localeCompare(b, "ru"));
+  }
 
   async function load() {
     if (!token) return;
     setErr(null);
     try {
-      const [u, c] = await Promise.all([
+      const [u, c, names] = await Promise.all([
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
+        loadAllItemNames(token).catch(() => []),
       ]);
       setUoms(u ?? []);
       setCats(c ?? []);
+      setExistingItemNames(names ?? []);
 
       const firstCat = (c ?? [])[0];
       if (firstCat && categoryId === null) {
@@ -150,6 +194,10 @@ export default function NsiItemCreatePage() {
     if (!token) return;
     if (!categoryId) { setErr("Выберите категорию."); return; }
     if (!storageUom) { setErr("Выберите единицу хранения."); return; }
+    if (exactNameDuplicate) {
+      setErr("Номенклатура с таким названием уже существует. Выберите существующую позицию или укажите другое имя.");
+      return;
+    }
     setErr(null);
     try {
       await createDefaultFieldIfNeeded();
@@ -192,7 +240,17 @@ export default function NsiItemCreatePage() {
         <div className="row">
           <label style={{ flex: 1 }}>
             <small>Название товара</small><br />
-            <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%" }} />
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{ width: "100%" }}
+              list="item-name-suggestions"
+              autoComplete="off"
+            />
+            <datalist id="item-name-suggestions">
+              {nameSuggestions.map((s) => <option key={s} value={s} />)}
+            </datalist>
+            {exactNameDuplicate && <small style={{ color: "#fca5a5" }}>Такое название уже есть в справочнике.</small>}
           </label>
           <label>
             <small>Категория</small><br />
@@ -289,7 +347,7 @@ export default function NsiItemCreatePage() {
 
         <div className="row" style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => nav("/nsi/items")}>Отмена</button>
-          <button className="btn primary" onClick={create}>Создать</button>
+          <button className="btn primary" onClick={create} disabled={exactNameDuplicate}>Создать</button>
         </div>
       </div>
     </div>

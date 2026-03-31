@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { ApiError, requestJson } from "../api/request";
 import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
+import { ruleParamLabel, ruleTypeLabel, uomCategoryLabel, uomLabel } from "../lib/ruLabels";
 import { toNum } from "./nsi_utils";
 
 type Scope = "global" | "category" | "item";
@@ -53,19 +54,19 @@ const PAIR_RULE_SPECS: Record<string, PairRuleSpec> = {
   "COUNT|MASS": {
     ruleType: "pcs_weight",
     paramKey: "kg_per_pc",
-    label: "Вес 1 PCS (kg_per_pc, кг)",
+    label: "Р’РµСЃ 1 С€С‚СѓРєРё (РєРі)",
     example: "0.023",
   },
   "LENGTH|MASS": {
     ruleType: "kg_per_m",
     paramKey: "kg_per_m",
-    label: "Линейная масса (kg_per_m, кг/м)",
+    label: "Р›РёРЅРµР№РЅР°СЏ РјР°СЃСЃР° (РєРі/Рј)",
     example: "1",
   },
   "MASS|VOLUME": {
     ruleType: "density",
     paramKey: "density_kg_per_l",
-    label: "Плотность (density_kg_per_l, кг/л)",
+    label: "РџР»РѕС‚РЅРѕСЃС‚СЊ (РєРі/Р»)",
     example: "1",
   },
 };
@@ -103,6 +104,30 @@ function stableStringify(value: unknown): string {
   }
   const s = JSON.stringify(value);
   return s === undefined ? "null" : s;
+}
+
+function normalizeConditionsMap(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, unknown> = {};
+  for (const [rawKey, rawValue] of Object.entries(value as Record<string, unknown>)) {
+    const key = String(rawKey ?? "").trim();
+    if (!key) continue;
+    if (rawValue === undefined || rawValue === null) continue;
+    if (key === "supplier_code") {
+      const supplier = String(rawValue).trim();
+      if (!supplier) continue;
+      out[key] = supplier;
+      continue;
+    }
+    out[key] = rawValue;
+  }
+  return out;
+}
+
+function stripSupplierCondition(value: unknown): Record<string, unknown> {
+  const out = { ...normalizeConditionsMap(value) };
+  delete out.supplier_code;
+  return out;
 }
 
 function pickUomForCategory(uoms: any[], uomCatsById: Map<number, any>, categoryId: number | null | undefined): number | null {
@@ -234,9 +259,9 @@ function ruleParamKey(ruleType: ItemRuleType): string {
 }
 
 function ruleHint(ruleType: ItemRuleType): string {
-  if (ruleType === "density") return "Ограничение: MASS <-> VOLUME.";
-  if (ruleType === "kg_per_m") return "Ограничение: LENGTH <-> MASS.";
-  return "Ограничение: COUNT <-> MASS (для COUNT используйте PCS).";
+  if (ruleType === "density") return "РћРіСЂР°РЅРёС‡РµРЅРёРµ: РњР°СЃСЃР° в†” РћР±СЉРµРј.";
+  if (ruleType === "kg_per_m") return "РћРіСЂР°РЅРёС‡РµРЅРёРµ: Р”Р»РёРЅР° в†” РњР°СЃСЃР°.";
+  return "РћРіСЂР°РЅРёС‡РµРЅРёРµ: РљРѕР»РёС‡РµСЃС‚РІРѕ в†” РњР°СЃСЃР° (РґР»СЏ РєРѕР»РёС‡РµСЃС‚РІР° РёСЃРїРѕР»СЊР·СѓР№С‚Рµ РЁРў).";
 }
 
 function defaultItemPreset(ruleType: ItemRuleType, uoms: any[]): { fromId: number | null; toId: number | null; coef: string } {
@@ -343,7 +368,7 @@ export default function NsiRulesWizardPage() {
     return buildCompositeRuleSteps(fromCatCode, toCatCode);
   }, [scope, isEditMode, fromUom, toUom, inferredRuleType, fromCatCode, toCatCode]);
   const useCompositeMode = scope === "item" && !isEditMode && compositeRuleSteps.length > 0;
-  const variantMode = scope === "item" && !isEditMode && !useCompositeMode;
+  const variantMode = scope === "item" && !useCompositeMode;
   const [compositeParams, setCompositeParams] = useState<Record<string, string>>({});
   const [itemRuleVariants, setItemRuleVariants] = useState<ItemRuleVariant[]>([]);
   const prevVariantItemId = useRef<number | null>(null);
@@ -351,6 +376,21 @@ export default function NsiRulesWizardPage() {
   const [counterpartyNameDraft, setCounterpartyNameDraft] = useState("");
   const [counterpartySaving, setCounterpartySaving] = useState(false);
   const [counterpartyErr, setCounterpartyErr] = useState<string | null>(null);
+  const normalizedCounterpartyDraft = counterpartyNameDraft.trim().toLowerCase();
+  const counterpartyNameSuggestions = useMemo(() => {
+    const names = counterparties
+      .map((cp) => String(cp.name ?? "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "ru"));
+    if (!normalizedCounterpartyDraft) return names.slice(0, 10);
+    return names
+      .filter((name) => name.toLowerCase().includes(normalizedCounterpartyDraft))
+      .slice(0, 10);
+  }, [counterparties, normalizedCounterpartyDraft]);
+  const hasCounterpartyDuplicate = useMemo(() => {
+    if (!normalizedCounterpartyDraft) return false;
+    return counterparties.some((cp) => String(cp.name ?? "").trim().toLowerCase() === normalizedCounterpartyDraft);
+  }, [counterparties, normalizedCounterpartyDraft]);
 
   useEffect(() => {
     if (scope !== "item") return;
@@ -406,8 +446,8 @@ export default function NsiRulesWizardPage() {
   }, [token, itemId, selectedItem?.id]);
 
   const exampleText = useMemo(() => {
-    if (scope === "global") return "Пример товара: любой товар";
-    if (scope === "category") return `Пример товара: любой товар из категории "${itemCatById.get(categoryId ?? -1)?.name ?? "-"}"`;
+    if (scope === "global") return "РџСЂРёРјРµСЂ С‚РѕРІР°СЂР°: Р»СЋР±РѕР№ С‚РѕРІР°СЂ";
+    if (scope === "category") return `РџСЂРёРјРµСЂ С‚РѕРІР°СЂР°: Р»СЋР±РѕР№ С‚РѕРІР°СЂ РёР· РєР°С‚РµРіРѕСЂРёРё "${itemCatById.get(categoryId ?? -1)?.name ?? "-"}"`;
     const itemTitle = selectedItem?.name ?? (itemId ? "#" + String(itemId) : "-");
     return "\u041f\u0440\u0438\u043c\u0435\u0440 \u0442\u043e\u0432\u0430\u0440\u0430: " + itemTitle;
   }, [scope, categoryId, itemId, selectedItem, itemCatById]);
@@ -456,44 +496,44 @@ export default function NsiRulesWizardPage() {
 
   const validations = useMemo(() => {
     const v: string[] = [];
-    if (!fromUom || !toUom) v.push("Выберите входящую и итоговую ЕИ.");
-    if (!useCompositeMode && n(coef) <= 0) v.push("Параметр коэффициента должен быть > 0.");
+    if (!fromUom || !toUom) v.push("Р’С‹Р±РµСЂРёС‚Рµ РІС…РѕРґСЏС‰СѓСЋ Рё РёС‚РѕРіРѕРІСѓСЋ Р•Р.");
+    if (!useCompositeMode && n(coef) <= 0) v.push("РџР°СЂР°РјРµС‚СЂ РєРѕСЌС„С„РёС†РёРµРЅС‚Р° РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ > 0.");
 
     if (scope === "global") {
       if (fromUom && toUom && fromUom.category !== toUom.category) {
-        v.push("Глобальные правила возможны только внутри одной категории ЕИ.");
+        v.push("Р“Р»РѕР±Р°Р»СЊРЅС‹Рµ РїСЂР°РІРёР»Р° РІРѕР·РјРѕР¶РЅС‹ С‚РѕР»СЊРєРѕ РІРЅСѓС‚СЂРё РѕРґРЅРѕР№ РєР°С‚РµРіРѕСЂРёРё Р•Р.");
       }
     }
 
     if (scope === "category") {
-      if (!categoryId) v.push("Выберите категорию номенклатуры.");
-      if (fromUom && fromCatCode !== "COUNT") v.push("Для правила категории входящая ЕИ должна быть из COUNT.");
-      if (toUom && toCatCode !== "MASS") v.push("Для правила категории итоговая ЕИ должна быть из MASS.");
+      if (!categoryId) v.push("Р’С‹Р±РµСЂРёС‚Рµ РєР°С‚РµРіРѕСЂРёСЋ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹.");
+      if (fromUom && fromCatCode !== "COUNT") v.push("Р”Р»СЏ РїСЂР°РІРёР»Р° РєР°С‚РµРіРѕСЂРёРё РІС…РѕРґСЏС‰Р°СЏ Р•Р РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РёР· РєР°С‚РµРіРѕСЂРёРё В«РљРѕР»РёС‡РµСЃС‚РІРѕВ».");
+      if (toUom && toCatCode !== "MASS") v.push("Р”Р»СЏ РїСЂР°РІРёР»Р° РєР°С‚РµРіРѕСЂРёРё РёС‚РѕРіРѕРІР°СЏ Р•Р РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РёР· РєР°С‚РµРіРѕСЂРёРё В«РњР°СЃСЃР°В».");
     }
 
     if (scope === "item") {
-      if (!itemId) v.push("Выберите номенклатурную позицию.");
+      if (!itemId) v.push("Р’С‹Р±РµСЂРёС‚Рµ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂРЅСѓСЋ РїРѕР·РёС†РёСЋ.");
       if (useCompositeMode) {
         compositeRuleSteps.forEach((step, idx) => {
           const id = compositeStepId(step);
           if (n(compositeParams[id]) <= 0) {
-            v.push(`Заполните коэффициент для шага ${idx + 1} (${step.paramKey}).`);
+            v.push(`Р—Р°РїРѕР»РЅРёС‚Рµ РєРѕСЌС„С„РёС†РёРµРЅС‚ РґР»СЏ С€Р°РіР° ${idx + 1} (${step.paramKey}).`);
           }
         });
       } else {
         if (!ruleTypeFitsPair(itemRuleType, fromCatCode, toCatCode)) {
-          v.push(`Выбранный тип правила не подходит для пары категорий (${fromCatCode} -> ${toCatCode}).`);
+          v.push(`Р’С‹Р±СЂР°РЅРЅС‹Р№ С‚РёРї РїСЂР°РІРёР»Р° РЅРµ РїРѕРґС…РѕРґРёС‚ РґР»СЏ РїР°СЂС‹ РєР°С‚РµРіРѕСЂРёР№ (${uomCategoryLabel(fromCatCode)} -> ${uomCategoryLabel(toCatCode)}).`);
         }
 
         if (variantMode) {
           const seen = new Set<string>();
           itemRuleVariants.forEach((vr, idx) => {
             const supplier = vr.supplier_code.trim();
-            if (!supplier) v.push(`Укажите название поставщика для варианта #${idx + 1}.`);
-            if (n(vr.coef) <= 0) v.push(`Коэффициент варианта #${idx + 1} должен быть > 0.`);
+            if (!supplier) v.push(`РЈРєР°Р¶РёС‚Рµ РЅР°Р·РІР°РЅРёРµ РїРѕСЃС‚Р°РІС‰РёРєР° РґР»СЏ РІР°СЂРёР°РЅС‚Р° #${idx + 1}.`);
+            if (n(vr.coef) <= 0) v.push(`РљРѕСЌС„С„РёС†РёРµРЅС‚ РІР°СЂРёР°РЅС‚Р° #${idx + 1} РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ > 0.`);
             if (supplier) {
               const key = supplier.toLowerCase();
-              if (seen.has(key)) v.push(`Дублируется поставщик "${supplier}" в вариантах.`);
+              if (seen.has(key)) v.push(`Р”СѓР±Р»РёСЂСѓРµС‚СЃСЏ РїРѕСЃС‚Р°РІС‰РёРє "${supplier}" РІ РІР°СЂРёР°РЅС‚Р°С….`);
               seen.add(key);
             }
           });
@@ -538,7 +578,7 @@ export default function NsiRulesWizardPage() {
 
       if (isEditMode) {
         if (!editId) {
-          throw new Error("Некорректный идентификатор правила.");
+          throw new Error("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїСЂР°РІРёР»Р°.");
         }
 
         if (editScope === "global") {
@@ -577,23 +617,90 @@ export default function NsiRulesWizardPage() {
 
           const loadedType = parseItemRuleType(r.rule_type) ?? "pcs_weight";
           const paramKey = ruleParamKey(loadedType);
+          const selectedConditions = normalizeConditionsMap(r.conditions);
+          const selectedBaseConditions = stripSupplierCondition(selectedConditions);
+          const selectedBaseKey = stableStringify(selectedBaseConditions);
+          const selectedFromCategory = Number(r.from_category);
+          const selectedToCategory = Number(r.to_category);
 
+          const relatedRaw = await requestJson<any>({
+            method: "GET",
+            url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/?item=${r.item}`,
+            token,
+          }).catch(() => []);
+          const relatedRows = Array.isArray(relatedRaw)
+            ? relatedRaw
+            : (Array.isArray(relatedRaw?.results) ? relatedRaw.results : []);
+
+          const matchedRows = (relatedRows ?? []).filter((row: any) => {
+            if (!row) return false;
+            if (Number(row.item) !== Number(r.item)) return false;
+            if (String(row.rule_type ?? "") !== loadedType) return false;
+
+            const rowFromCategory = Number(row.from_category);
+            const rowToCategory = Number(row.to_category);
+            if (
+              !(
+                (rowFromCategory === selectedFromCategory && rowToCategory === selectedToCategory) ||
+                (rowFromCategory === selectedToCategory && rowToCategory === selectedFromCategory)
+              )
+            ) {
+              return false;
+            }
+
+            const rowBaseKey = stableStringify(stripSupplierCondition(row.conditions));
+            return rowBaseKey === selectedBaseKey;
+          });
+
+          const sourceRows = matchedRows.length ? matchedRows : [r];
+          sourceRows.sort((a: any, b: any) => Number(b?.id ?? 0) - Number(a?.id ?? 0));
+          const defaultRow = sourceRows.find((row: any) => {
+            const conditions = normalizeConditionsMap(row?.conditions);
+            return !String(conditions.supplier_code ?? "").trim();
+          }) ?? sourceRows.find((row: any) => Number(row?.id) === Number(r?.id)) ?? sourceRows[0];
+
+          const defaultConditions = normalizeConditionsMap(defaultRow?.conditions);
+          const defaultBaseConditions = stripSupplierCondition(defaultConditions);
+          const defaultPriority = Number(defaultRow?.priority ?? r?.priority ?? 0);
+          const defaultEffectiveFrom = defaultRow?.effective_from ? String(defaultRow.effective_from) : null;
+          const defaultEffectiveTo = defaultRow?.effective_to ? String(defaultRow.effective_to) : null;
+          const defaultSupersedes = defaultRow?.supersedes ? Number(defaultRow.supersedes) : null;
+          const defaultStatus = (defaultRow?.status ?? r?.status ?? "active") as "active" | "draft" | "archived";
+          const defaultCoef = String(defaultRow?.params?.[paramKey] ?? r?.params?.[paramKey] ?? "1");
+
+          const variantsSeen = new Set<string>();
+          const loadedVariants: ItemRuleVariant[] = [];
+          for (const row of sourceRows) {
+            const conditions = normalizeConditionsMap(row?.conditions);
+            const supplier = String(conditions.supplier_code ?? "").trim();
+            if (!supplier) continue;
+            const supplierKey = supplier.toLowerCase();
+            if (variantsSeen.has(supplierKey)) continue;
+            variantsSeen.add(supplierKey);
+            loadedVariants.push({
+              key: `loaded_${Number(row?.id ?? loadedVariants.length + 1)}`,
+              supplier_code: supplier,
+              coef: String(row?.params?.[paramKey] ?? "1"),
+            });
+          }
+
+          prevVariantItemId.current = Number(r.item ?? null);
           setItemId(r.item ?? null);
           setItemRuleType(loadedType);
-          setCoef(String(r.params?.[paramKey] ?? "1"));
-          setStatus((r.status ?? "active") as any);
+          setCoef(defaultCoef);
+          setStatus(defaultStatus);
           setItemRuleMeta({
-            conditions: (r.conditions && typeof r.conditions === "object" && !Array.isArray(r.conditions)) ? r.conditions : {},
-            priority: Number(r.priority ?? 0),
-            effective_from: r.effective_from ? String(r.effective_from) : null,
-            effective_to: r.effective_to ? String(r.effective_to) : null,
-            supersedes: r.supersedes ? Number(r.supersedes) : null,
+            conditions: defaultBaseConditions,
+            priority: defaultPriority,
+            effective_from: defaultEffectiveFrom,
+            effective_to: defaultEffectiveTo,
+            supersedes: defaultSupersedes,
           });
-          const loadedConditions = (r.conditions && typeof r.conditions === "object" && !Array.isArray(r.conditions)) ? r.conditions : {};
-          setItemSupplierCode(String((loadedConditions as Record<string, unknown>).supplier_code ?? ""));
+          setItemSupplierCode(String(defaultConditions.supplier_code ?? ""));
+          setItemRuleVariants(loadedVariants);
 
-          const guessedFromUomId = pickUomForCategory(nextUoms, nextUomCatsById, r.from_category);
-          const guessedToUomId = pickUomForCategory(nextUoms, nextUomCatsById, r.to_category);
+          const guessedFromUomId = pickUomForCategory(nextUoms, nextUomCatsById, defaultRow?.from_category ?? r.from_category);
+          const guessedToUomId = pickUomForCategory(nextUoms, nextUomCatsById, defaultRow?.to_category ?? r.to_category);
           setFromUomId(guessedFromUomId);
           setToUomId(guessedToUomId);
         }
@@ -648,11 +755,11 @@ export default function NsiRulesWizardPage() {
   }, [token, isEditMode, editId, editScope, location.search]);
 
   const coefLabel = useMemo(() => {
-    if (scope === "global") return "Коэффициент (multiplier)";
-    if (scope === "category") return "Коэффициент (сколько итоговой ЕИ в 1 входящей)";
-    if (itemRuleType === "density") return "Плотность (density_kg_per_l, кг/л)";
-    if (itemRuleType === "kg_per_m") return "Линейная масса (kg_per_m, кг/м)";
-    return "Вес 1 PCS (kg_per_pc, кг)";
+    if (scope === "global") return "РљРѕСЌС„С„РёС†РёРµРЅС‚ РїРµСЂРµСЃС‡РµС‚Р°";
+    if (scope === "category") return "РљРѕСЌС„С„РёС†РёРµРЅС‚ (СЃРєРѕР»СЊРєРѕ РёС‚РѕРіРѕРІРѕР№ Р•Р РІ 1 РІС…РѕРґСЏС‰РµР№)";
+    if (itemRuleType === "density") return "РџР»РѕС‚РЅРѕСЃС‚СЊ (РєРі/Р»)";
+    if (itemRuleType === "kg_per_m") return "Р›РёРЅРµР№РЅР°СЏ РјР°СЃСЃР° (РєРі/Рј)";
+    return "Р’РµСЃ 1 С€С‚СѓРєРё (РєРі)";
   }, [scope, itemRuleType]);
 
   function baseItemConditions(): Record<string, unknown> {
@@ -689,10 +796,14 @@ export default function NsiRulesWizardPage() {
     if (!token) return;
     const name = counterpartyNameDraft.trim();
     if (!name) {
-      setCounterpartyErr("Укажите название контрагента.");
+      setCounterpartyErr("РЈРєР°Р¶РёС‚Рµ РЅР°Р·РІР°РЅРёРµ РєРѕРЅС‚СЂР°РіРµРЅС‚Р°.");
       return;
     }
 
+    if (hasCounterpartyDuplicate) {
+      setCounterpartyErr("РљРѕРЅС‚СЂР°РіРµРЅС‚ СЃ С‚Р°РєРёРј РЅР°Р·РІР°РЅРёРµРј СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚. РЈРєР°Р¶РёС‚Рµ РґСЂСѓРіРѕРµ РёРјСЏ.");
+      return;
+    }
     setCounterpartyErr(null);
     setCounterpartySaving(true);
     try {
@@ -755,7 +866,7 @@ export default function NsiRulesWizardPage() {
     if (!token || !canCreateDefaultField || !makeDefaultField) return;
 
     const fieldCode = defaultFieldCode.trim();
-    if (!fieldCode) throw new Error("Укажите код поля по умолчанию.");
+    if (!fieldCode) throw new Error("РЈРєР°Р¶РёС‚Рµ РєРѕРґ РїРѕР»СЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ.");
 
     try {
       await requestJson({
@@ -787,7 +898,7 @@ export default function NsiRulesWizardPage() {
     if (!canSave) return;
 
     if (isEditMode && !editId) {
-      setErr("Некорректный идентификатор правила.");
+      setErr("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїСЂР°РІРёР»Р°.");
       return;
     }
 
@@ -828,13 +939,13 @@ export default function NsiRulesWizardPage() {
         const conditionsForSave = itemConditionsForSave();
 
         if (useCompositeMode) {
-          if (!itemId) throw new Error("Выберите номенклатурную позицию.");
+          if (!itemId) throw new Error("Р’С‹Р±РµСЂРёС‚Рµ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂРЅСѓСЋ РїРѕР·РёС†РёСЋ.");
 
           for (const step of compositeRuleSteps) {
             const fromCategoryId = catIdByCode.get(up(step.fromCategory));
             const toCategoryId = catIdByCode.get(up(step.toCategory));
             if (!fromCategoryId || !toCategoryId) {
-              throw new Error(`Не найдены категории ЕИ для шага ${step.fromCategory} -> ${step.toCategory}.`);
+              throw new Error(`РќРµ РЅР°Р№РґРµРЅС‹ РєР°С‚РµРіРѕСЂРёРё Р•Р РґР»СЏ С€Р°РіР° ${uomCategoryLabel(step.fromCategory)} -> ${uomCategoryLabel(step.toCategory)}.`);
             }
 
             const id = compositeStepId(step);
@@ -909,8 +1020,8 @@ export default function NsiRulesWizardPage() {
           };
 
           if (variantMode) {
-            const defaultConditions = baseItemConditions();
-            const rowsToSave: Array<{ conditions: Record<string, unknown>; params: Record<string, string> }> = [
+            const defaultConditions = normalizeConditionsMap(baseItemConditions());
+            const rawRows: Array<{ conditions: Record<string, unknown>; params: Record<string, string> }> = [
               { conditions: defaultConditions, params: defaultParams },
               ...itemRuleVariants.map((vr) => ({
                 conditions: { ...defaultConditions, supplier_code: vr.supplier_code.trim() },
@@ -918,45 +1029,81 @@ export default function NsiRulesWizardPage() {
               })),
             ];
 
-            for (const row of rowsToSave) {
-              let matchedRule: any = null;
-              try {
-                const matched = await requestJson<any>({
-                  method: "POST",
-                  url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/match`,
-                  token,
-                  body: {
-                    item: itemId,
-                    from_category: fromCatCode,
-                    to_category: toCatCode,
-                    context: row.conditions,
-                    on_date: new Date().toISOString().slice(0, 10),
-                  },
-                });
-                matchedRule = matched?.rule ?? null;
-              } catch (e: any) {
-                if (!(e instanceof ApiError) || e.status !== 404) throw e;
-              }
+            const rowsByCondition = new Map<string, { conditions: Record<string, unknown>; params: Record<string, string> }>();
+            for (const row of rawRows) {
+              const conditions = normalizeConditionsMap(row.conditions);
+              rowsByCondition.set(stableStringify(conditions), { conditions, params: row.params });
+            }
+            const rowsToSave = Array.from(rowsByCondition.values());
 
-              const matchedConditions = (matchedRule?.conditions && typeof matchedRule.conditions === "object")
-                ? matchedRule.conditions
-                : {};
-              const sameConditions = stableStringify(matchedConditions) === stableStringify(row.conditions);
-              if (matchedRule && matchedRule.item === itemId && matchedRule.rule_type === itemRuleType && sameConditions) {
+            const existingRows = await requestJson<any[]>({
+              method: "GET",
+              url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/?item=${itemId}&status=active`,
+              token,
+            });
+
+            const currentPair = new Set([up(fromCatCode), up(toCatCode)]);
+            const baseKey = stableStringify(stripSupplierCondition(defaultConditions));
+            const existingByCondition = new Map<string, any[]>();
+            for (const existing of existingRows ?? []) {
+              if (!existing || Number(existing.item) !== Number(itemId)) continue;
+              if (String(existing.rule_type ?? "") !== itemRuleType) continue;
+
+              const rf = up(uomCatsById.get(existing.from_category)?.code ?? "");
+              const rt = up(uomCatsById.get(existing.to_category)?.code ?? "");
+              if (!rf || !rt) continue;
+              if (!(currentPair.has(rf) && currentPair.has(rt))) continue;
+
+              const existingBaseKey = stableStringify(stripSupplierCondition(existing.conditions));
+              if (existingBaseKey !== baseKey) continue;
+
+              const key = stableStringify(normalizeConditionsMap(existing.conditions));
+              const bucket = existingByCondition.get(key) ?? [];
+              bucket.push(existing);
+              bucket.sort((a, b) => Number(b?.id ?? 0) - Number(a?.id ?? 0));
+              existingByCondition.set(key, bucket);
+            }
+
+            const keptRuleIds = new Set<number>();
+            for (const row of rowsToSave) {
+              const key = stableStringify(row.conditions);
+              const bucket = existingByCondition.get(key) ?? [];
+              const reused = bucket.shift() ?? null;
+              existingByCondition.set(key, bucket);
+
+              if (reused && reused.id) {
                 await requestJson({
                   method: "PUT",
-                  url: `${rulesBaseUrl}${matchedRule.id}/`,
+                  url: `${rulesBaseUrl}${reused.id}/`,
                   token,
                   body: { ...baseBody, conditions: row.conditions, params: row.params },
                 });
+                keptRuleIds.add(Number(reused.id));
               } else {
-                await requestJson({
+                const created = await requestJson<any>({
                   method: "POST",
                   url: rulesBaseUrl,
                   token,
                   body: { ...baseBody, conditions: row.conditions, params: row.params },
                 });
+                const createdId = Number(created?.id ?? 0);
+                if (createdId > 0) keptRuleIds.add(createdId);
               }
+            }
+
+            const staleRuleIds: number[] = [];
+            for (const bucket of existingByCondition.values()) {
+              for (const existing of bucket) {
+                const id = Number(existing?.id ?? 0);
+                if (id > 0 && !keptRuleIds.has(id)) staleRuleIds.push(id);
+              }
+            }
+            for (const staleId of staleRuleIds) {
+              await requestJson({
+                method: "DELETE",
+                url: `${rulesBaseUrl}${staleId}/`,
+                token,
+              });
             }
           } else {
             await requestJson({
@@ -981,39 +1128,39 @@ export default function NsiRulesWizardPage() {
     }
   }
 
-  const pageTitle = isEditMode ? "Редактирование правила" : "Создание правила";
+  const pageTitle = isEditMode ? "Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РїСЂР°РІРёР»Р°" : "РЎРѕР·РґР°РЅРёРµ РїСЂР°РІРёР»Р°";
   const pageSubtitle = isEditMode
-    ? "Измените параметры и сохраните правило."
-    : "Создайте правило перевода между ЕИ. Для межкатегорийного перевода выбирайте тип правила в блоке параметров.";
+    ? "РР·РјРµРЅРёС‚Рµ РїР°СЂР°РјРµС‚СЂС‹ Рё СЃРѕС…СЂР°РЅРёС‚Рµ РїСЂР°РІРёР»Рѕ."
+    : "РЎРѕР·РґР°Р№С‚Рµ РїСЂР°РІРёР»Рѕ РїРµСЂРµРІРѕРґР° РјРµР¶РґСѓ Р•Р. Р”Р»СЏ РјРµР¶РєР°С‚РµРіРѕСЂРёР№РЅРѕРіРѕ РїРµСЂРµРІРѕРґР° РІС‹Р±РёСЂР°Р№С‚Рµ С‚РёРї РїСЂР°РІРёР»Р° РІ Р±Р»РѕРєРµ РїР°СЂР°РјРµС‚СЂРѕРІ.";
   const submitLabel = isEditMode
-    ? "Сохранить"
-    : (useCompositeMode ? "Создать набор правил" : (variantMode ? "Создать правило и варианты" : "Создать правило"));
+    ? "РЎРѕС…СЂР°РЅРёС‚СЊ"
+    : (useCompositeMode ? "РЎРѕР·РґР°С‚СЊ РЅР°Р±РѕСЂ РїСЂР°РІРёР»" : (variantMode ? "РЎРѕР·РґР°С‚СЊ РїСЂР°РІРёР»Рѕ Рё РІР°СЂРёР°РЅС‚С‹" : "РЎРѕР·РґР°С‚СЊ РїСЂР°РІРёР»Рѕ"));
 
   return (
     <div className="card">
       <PageHeader
         title={pageTitle}
         subtitle={pageSubtitle}
-        right={<button className="btn" onClick={() => nav("/nsi/rules")}>Отмена</button>}
+        right={<button className="btn" onClick={() => nav("/nsi/rules")}>РћС‚РјРµРЅР°</button>}
       />
 
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Тип правила</h4>
+        <h4 style={{ marginTop: 0 }}>РўРёРї РїСЂР°РІРёР»Р°</h4>
         <div className="row">
           <label>
-            <small>Какое правило создаем?</small><br />
+            <small>РљР°РєРѕРµ РїСЂР°РІРёР»Рѕ СЃРѕР·РґР°РµРј?</small><br />
             <select value={scope} onChange={(e) => setScope(e.target.value as Scope)} disabled={isEditMode}>
-              <option value="global">Глобальное (для всех)</option>
-              <option value="category">Для категории</option>
-              <option value="item">Для номенклатурной позиции</option>
+              <option value="global">Р“Р»РѕР±Р°Р»СЊРЅРѕРµ (РґР»СЏ РІСЃРµС…)</option>
+              <option value="category">Р”Р»СЏ РєР°С‚РµРіРѕСЂРёРё</option>
+              <option value="item">Р”Р»СЏ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂРЅРѕР№ РїРѕР·РёС†РёРё</option>
             </select>
           </label>
 
           {scope === "category" && (
             <label style={{ flex: 1 }}>
-              <small>Категория</small><br />
+              <small>РљР°С‚РµРіРѕСЂРёСЏ</small><br />
               <select value={categoryId ?? ""} onChange={(e) => setCategoryId(toNum(e.target.value))} style={{ width: "100%" }}>
                 {itemCats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -1023,7 +1170,7 @@ export default function NsiRulesWizardPage() {
           {scope === "item" && (
             <>
               <label style={{ flex: 1 }}>
-                <small>Номенклатура</small><br />
+                <small>РќРѕРјРµРЅРєР»Р°С‚СѓСЂР°</small><br />
                 <ItemLookup
                   token={token}
                   value={itemId}
@@ -1035,11 +1182,11 @@ export default function NsiRulesWizardPage() {
               </label>
 
               <label>
-                <small>Тип конвертации</small><br />
+                <small>РўРёРї РєРѕРЅРІРµСЂС‚Р°С†РёРё</small><br />
                 <select value={itemRuleType} onChange={(e) => setItemRuleType(e.target.value as ItemRuleType)} disabled={useCompositeMode}>
-                  <option value="pcs_weight">COUNT ↔ MASS (pcs_weight)</option>
-                  <option value="kg_per_m">LENGTH ↔ MASS (kg_per_m)</option>
-                  <option value="density">MASS ↔ VOLUME (density)</option>
+                  <option value="pcs_weight">РџРѕ РІРµСЃСѓ С€С‚СѓРєРё</option>
+                  <option value="kg_per_m">РџРѕ Р»РёРЅРµР№РЅРѕР№ РјР°СЃСЃРµ</option>
+                  <option value="density">РџРѕ РїР»РѕС‚РЅРѕСЃС‚Рё</option>
                 </select>
               </label>
             </>
@@ -1049,29 +1196,29 @@ export default function NsiRulesWizardPage() {
         {useCompositeMode && (
           <div style={{ marginTop: 8 }}>
             <small>
-              Прямого правила для пары {fromCatCode} {"->"} {toCatCode} нет. Будет создан набор правил по шагам через промежуточную категорию.
+              РџСЂСЏРјРѕРіРѕ РїСЂР°РІРёР»Р° РґР»СЏ РїР°СЂС‹ {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)} РЅРµС‚. Р‘СѓРґРµС‚ СЃРѕР·РґР°РЅ РЅР°Р±РѕСЂ РїСЂР°РІРёР» РїРѕ С€Р°РіР°Рј С‡РµСЂРµР· РїСЂРѕРјРµР¶СѓС‚РѕС‡РЅСѓСЋ РєР°С‚РµРіРѕСЂРёСЋ.
             </small>
           </div>
         )}
 
-        {isEditMode && <div style={{ marginTop: 8 }}><small>Тип области фиксирован в режиме редактирования.</small></div>}
+        {isEditMode && <div style={{ marginTop: 8 }}><small>РўРёРї РѕР±Р»Р°СЃС‚Рё С„РёРєСЃРёСЂРѕРІР°РЅ РІ СЂРµР¶РёРјРµ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ.</small></div>}
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Параметры правила</h4>
+        <h4 style={{ marginTop: 0 }}>РџР°СЂР°РјРµС‚СЂС‹ РїСЂР°РІРёР»Р°</h4>
 
         <div className="row">
           <label>
-            <small>входящая ЕИ</small><br />
+            <small>РІС…РѕРґСЏС‰Р°СЏ Р•Р</small><br />
             <select value={fromUomId ?? ""} onChange={(e) => setFromUomId(toNum(e.target.value))}>
-              {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.code} ({uomCatsById.get(u.category)?.code ?? "-"})</option>)}
+              {uoms.map((u: any) => <option key={u.id} value={u.id}>{uomLabel(u.code)} ({uomCategoryLabel(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
             </select>
           </label>
 
           <label>
-            <small>итоговая ЕИ</small><br />
+            <small>РёС‚РѕРіРѕРІР°СЏ Р•Р</small><br />
             <select value={toUomId ?? ""} onChange={(e) => setToUomId(toNum(e.target.value))}>
-              {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.code} ({uomCatsById.get(u.category)?.code ?? "-"})</option>)}
+              {uoms.map((u: any) => <option key={u.id} value={u.id}>{uomLabel(u.code)} ({uomCategoryLabel(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
             </select>
           </label>
 
@@ -1083,11 +1230,11 @@ export default function NsiRulesWizardPage() {
           )}
 
           <label>
-            <small>Статус</small><br />
+            <small>РЎС‚Р°С‚СѓСЃ</small><br />
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="active">active</option>
-              <option value="draft">draft</option>
-              <option value="archived">archived</option>
+              <option value="active">РђРєС‚РёРІРЅС‹Р№</option>
+              <option value="draft">Р§РµСЂРЅРѕРІРёРє</option>
+              <option value="archived">РђСЂС…РёРІ</option>
             </select>
           </label>
         </div>
@@ -1095,20 +1242,20 @@ export default function NsiRulesWizardPage() {
         {scope === "item" && !variantMode && (
           <div className="row" style={{ marginTop: 8 }}>
             <label>
-              <small>Поставщик (вариант правила, опционально)</small><br />
+              <small>РџРѕСЃС‚Р°РІС‰РёРє (РІР°СЂРёР°РЅС‚ РїСЂР°РІРёР»Р°, РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
               <select
                 value={itemSupplierCode}
                 onChange={(e) => setItemSupplierCode(e.target.value)}
               >
-                <option value="">По умолчанию</option>
+                <option value="">РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</option>
                 {supplierOptions(itemSupplierCode).map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
             </label>
-            <button type="button" className="btn btn-tight" onClick={openCounterpartyModal}>Новый контрагент</button>
+            <button type="button" className="btn btn-tight" onClick={openCounterpartyModal}>РќРѕРІС‹Р№ РєРѕРЅС‚СЂР°РіРµРЅС‚</button>
             <small>
-              Если поставщик не указан, правило будет общим для номенклатуры.
+              Р•СЃР»Рё РїРѕСЃС‚Р°РІС‰РёРє РЅРµ СѓРєР°Р·Р°РЅ, РїСЂР°РІРёР»Рѕ Р±СѓРґРµС‚ РѕР±С‰РёРј РґР»СЏ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹.
             </small>
           </div>
         )}
@@ -1116,27 +1263,27 @@ export default function NsiRulesWizardPage() {
         {scope === "category" && (
           <div className="row" style={{ marginTop: 8 }}>
             <label>
-              <small>Поставщик (опционально)</small><br />
+              <small>РџРѕСЃС‚Р°РІС‰РёРє (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
               <select
                 value={categoryRuleMeta.supplier_code}
                 onChange={(e) => setCategoryRuleMeta((v) => ({ ...v, supplier_code: e.target.value }))}
               >
-                <option value="">По умолчанию</option>
+                <option value="">РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</option>
                 {supplierOptions(categoryRuleMeta.supplier_code).map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
             </label>
-            <button type="button" className="btn btn-tight" onClick={openCounterpartyModal}>Новый контрагент</button>
+            <button type="button" className="btn btn-tight" onClick={openCounterpartyModal}>РќРѕРІС‹Р№ РєРѕРЅС‚СЂР°РіРµРЅС‚</button>
             <label>
-              <small>Штрихкод (опционально)</small><br />
+              <small>РЁС‚СЂРёС…РєРѕРґ (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
               <input
                 value={categoryRuleMeta.barcode}
                 onChange={(e) => setCategoryRuleMeta((v) => ({ ...v, barcode: e.target.value }))}
               />
             </label>
             <label>
-              <small>Действует с</small><br />
+              <small>Р”РµР№СЃС‚РІСѓРµС‚ СЃ</small><br />
               <input
                 type="date"
                 value={categoryRuleMeta.effective_from ?? ""}
@@ -1144,7 +1291,7 @@ export default function NsiRulesWizardPage() {
               />
             </label>
             <label>
-              <small>Действует по</small><br />
+              <small>Р”РµР№СЃС‚РІСѓРµС‚ РїРѕ</small><br />
               <input
                 type="date"
                 value={categoryRuleMeta.effective_to ?? ""}
@@ -1156,27 +1303,27 @@ export default function NsiRulesWizardPage() {
 
         {variantMode && (
           <div style={{ marginTop: 10 }}>
-            <small><b>Варианты перевода по поставщику</b></small>
+            <small><b>Р’Р°СЂРёР°РЅС‚С‹ РїРµСЂРµРІРѕРґР° РїРѕ РїРѕСЃС‚Р°РІС‰РёРєСѓ</b></small>
             <div className="table-wrap" style={{ marginTop: 6 }}>
               <table className="compact-table">
                 <thead>
                   <tr>
-                    <th>Вариант</th>
-                    <th>Поставщик</th>
+                    <th>Р’Р°СЂРёР°РЅС‚</th>
+                    <th>РџРѕСЃС‚Р°РІС‰РёРє</th>
                     <th>{coefLabel}</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td>По умолчанию</td>
-                    <td>—</td>
+                    <td>РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</td>
+                    <td>вЂ”</td>
                     <td><input value={coef} onChange={(e) => setCoef(e.target.value)} style={{ width: 180 }} /></td>
                     <td></td>
                   </tr>
                   {itemRuleVariants.map((vr, idx) => (
                     <tr key={vr.key}>
-                      <td>Вариант #{idx + 1}</td>
+                      <td>Р’Р°СЂРёР°РЅС‚ #{idx + 1}</td>
                       <td>
                         <select
                           value={vr.supplier_code}
@@ -1185,7 +1332,7 @@ export default function NsiRulesWizardPage() {
                           )))}
                           style={{ width: 220 }}
                         >
-                          <option value="">Выберите контрагента</option>
+                          <option value="">Р’С‹Р±РµСЂРёС‚Рµ РєРѕРЅС‚СЂР°РіРµРЅС‚Р°</option>
                           {supplierOptions(vr.supplier_code).map((name) => (
                             <option key={name} value={name}>{name}</option>
                           ))}
@@ -1201,7 +1348,7 @@ export default function NsiRulesWizardPage() {
                         />
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        <button className="btn btn-tight danger" type="button" onClick={() => removeVariantRow(vr.key)}>Удалить</button>
+                        <button className="btn btn-tight danger" type="button" onClick={() => removeVariantRow(vr.key)}>РЈРґР°Р»РёС‚СЊ</button>
                       </td>
                     </tr>
                   ))}
@@ -1210,10 +1357,10 @@ export default function NsiRulesWizardPage() {
             </div>
             <div className="row" style={{ marginTop: 8 }}>
               <button className="btn btn-tight" type="button" onClick={addVariantRow}>
-                Добавить вариант
+                Р”РѕР±Р°РІРёС‚СЊ РІР°СЂРёР°РЅС‚
               </button>
               <button className="btn btn-tight" type="button" onClick={openCounterpartyModal}>
-                Новый контрагент
+                РќРѕРІС‹Р№ РєРѕРЅС‚СЂР°РіРµРЅС‚
               </button>
             </div>
           </div>
@@ -1225,8 +1372,8 @@ export default function NsiRulesWizardPage() {
               const id = compositeStepId(step);
               return (
                 <div key={id} className="row" style={{ alignItems: "center", gap: 8, marginTop: idx === 0 ? 0 : 6 }}>
-                  <span className="badge">Шаг {idx + 1}</span>
-                  <small>{step.fromCategory} {"->"} {step.toCategory} ({step.ruleType})</small>
+                  <span className="badge">РЁР°Рі {idx + 1}</span>
+                  <small>{uomCategoryLabel(step.fromCategory)} {"->"} {uomCategoryLabel(step.toCategory)} ({ruleTypeLabel(step.ruleType)})</small>
                   <input
                     value={compositeParams[id] ?? ""}
                     onChange={(e) => setCompositeParams((m) => ({ ...m, [id]: e.target.value }))}
@@ -1240,22 +1387,22 @@ export default function NsiRulesWizardPage() {
         )}
 
         <div style={{ marginTop: 10 }}>
-          {scope === "global" && <small>Ограничение: обе ЕИ должны быть в <b>одной категории</b>. Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
-          {scope === "category" && <small>Ограничение: COUNT {"->"} MASS (пример: BAG {"->"} KG). Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
-          {scope === "item" && !useCompositeMode && <small>{ruleHint(itemRuleType)} Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
-          {scope === "item" && useCompositeMode && <small>Составной перевод. Сейчас: {fromCatCode} {"->"} {toCatCode}</small>}
+          {scope === "global" && <small>РћРіСЂР°РЅРёС‡РµРЅРёРµ: РѕР±Рµ Р•Р РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РІ <b>РѕРґРЅРѕР№ РєР°С‚РµРіРѕСЂРёРё</b>. РЎРµР№С‡Р°СЃ: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
+          {scope === "category" && <small>РћРіСЂР°РЅРёС‡РµРЅРёРµ: РљРѕР»РёС‡РµСЃС‚РІРѕ {"->"} РњР°СЃСЃР° (РїСЂРёРјРµСЂ: РњР•РЁРћРљ {"->"} РљР“). РЎРµР№С‡Р°СЃ: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
+          {scope === "item" && !useCompositeMode && <small>{ruleHint(itemRuleType)} РЎРµР№С‡Р°СЃ: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
+          {scope === "item" && useCompositeMode && <small>РЎРѕСЃС‚Р°РІРЅРѕР№ РїРµСЂРµРІРѕРґ. РЎРµР№С‡Р°СЃ: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>Пример перевода</h4>
+        <h4 style={{ marginTop: 0 }}>РџСЂРёРјРµСЂ РїРµСЂРµРІРѕРґР°</h4>
 
         <table>
           <thead>
             <tr>
-              <th>Пример товара</th>
-              <th>входящая ЕИ</th>
-              <th>исходящая ЕИ</th>
+              <th>РџСЂРёРјРµСЂ С‚РѕРІР°СЂР°</th>
+              <th>РІС…РѕРґСЏС‰Р°СЏ Р•Р</th>
+              <th>РёСЃС…РѕРґСЏС‰Р°СЏ Р•Р</th>
             </tr>
           </thead>
           <tbody>
@@ -1280,7 +1427,7 @@ export default function NsiRulesWizardPage() {
         {scope === "item" && !useCompositeMode && !variantMode ? (
           <div style={{ marginTop: 8 }}>
             <small>
-              Параметр для типа правила: <b>{ruleParamKey(itemRuleType)}</b>. Пример рассчитывается из выбранных ЕИ и коэффициента.
+              РџР°СЂР°РјРµС‚СЂ РґР»СЏ С‚РёРїР° РїСЂР°РІРёР»Р°: <b>{ruleParamLabel(ruleParamKey(itemRuleType))}</b>. РџСЂРёРјРµСЂ СЂР°СЃСЃС‡РёС‚С‹РІР°РµС‚СЃСЏ РёР· РІС‹Р±СЂР°РЅРЅС‹С… Р•Р Рё РєРѕСЌС„С„РёС†РёРµРЅС‚Р°.
             </small>
           </div>
         ) : null}
@@ -1288,7 +1435,7 @@ export default function NsiRulesWizardPage() {
         {variantMode ? (
           <div style={{ marginTop: 8 }}>
             <small>
-              При сохранении будет создано общее правило «По умолчанию» и отдельные правила для каждого варианта поставщика.
+              РџСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё Р±СѓРґРµС‚ СЃРѕР·РґР°РЅРѕ РѕР±С‰РµРµ РїСЂР°РІРёР»Рѕ В«РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋВ» Рё РѕС‚РґРµР»СЊРЅС‹Рµ РїСЂР°РІРёР»Р° РґР»СЏ РєР°Р¶РґРѕРіРѕ РІР°СЂРёР°РЅС‚Р° РїРѕСЃС‚Р°РІС‰РёРєР°.
             </small>
           </div>
         ) : null}
@@ -1296,7 +1443,7 @@ export default function NsiRulesWizardPage() {
         {scope === "item" && useCompositeMode ? (
           <div style={{ marginTop: 8 }}>
             <small>
-              Для пары {fromCatCode} {"->"} {toCatCode} требуется несколько параметров: {compositeRuleSteps.map((s) => s.paramKey).join(", ")}.
+              Р”Р»СЏ РїР°СЂС‹ {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)} С‚СЂРµР±СѓРµС‚СЃСЏ РЅРµСЃРєРѕР»СЊРєРѕ РїР°СЂР°РјРµС‚СЂРѕРІ: {compositeRuleSteps.map((s) => ruleParamLabel(s.paramKey)).join(", ")}.
             </small>
           </div>
         ) : null}
@@ -1313,33 +1460,33 @@ export default function NsiRulesWizardPage() {
           <div style={{ marginTop: 12 }}>
             <label className="row" style={{ gap: 8 }}>
               <input type="checkbox" checked={makeDefaultField} onChange={(e) => setMakeDefaultField(e.target.checked)} />
-              <small>поле по умолчанию</small>
+              <small>РїРѕР»Рµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</small>
             </label>
             {makeDefaultField && (
               <div className="row" style={{ marginTop: 8 }}>
                 <label>
-                  <small>Код поля</small><br />
+                  <small>РљРѕРґ РїРѕР»СЏ</small><br />
                   <input value={defaultFieldCode} onChange={(e) => setDefaultFieldCode(e.target.value)} />
                 </label>
                 <label>
-                  <small>Название</small><br />
+                  <small>РќР°Р·РІР°РЅРёРµ</small><br />
                   <input value={defaultFieldLabel} onChange={(e) => setDefaultFieldLabel(e.target.value)} />
                 </label>
                 <label>
-                  <small>Тип</small><br />
+                  <small>РўРёРї</small><br />
                   <select value={defaultFieldType} onChange={(e) => setDefaultFieldType(e.target.value as "string" | "number" | "boolean")}>
-                    <option value="string">string</option>
-                    <option value="number">number</option>
-                    <option value="boolean">boolean</option>
+                    <option value="string">РЎС‚СЂРѕРєР°</option>
+                    <option value="number">Р§РёСЃР»Рѕ</option>
+                    <option value="boolean">Р›РѕРіРёС‡РµСЃРєРѕРµ</option>
                   </select>
                 </label>
                 <label>
-                  <small>Значение по умолчанию</small><br />
+                  <small>Р—РЅР°С‡РµРЅРёРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</small><br />
                   <input value={defaultFieldValue} onChange={(e) => setDefaultFieldValue(e.target.value)} />
                 </label>
                 <label className="row" style={{ gap: 6 }}>
                   <input type="checkbox" checked={defaultFieldRequired} onChange={(e) => setDefaultFieldRequired(e.target.checked)} />
-                  <small>обязательное</small>
+                  <small>РѕР±СЏР·Р°С‚РµР»СЊРЅРѕРµ</small>
                 </label>
               </div>
             )}
@@ -1347,7 +1494,7 @@ export default function NsiRulesWizardPage() {
         )}
 
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={() => nav("/nsi/rules")}>Отмена</button>
+          <button className="btn" onClick={() => nav("/nsi/rules")}>РћС‚РјРµРЅР°</button>
           <button className="btn primary" onClick={saveRule} disabled={!canSave}>{submitLabel}</button>
         </div>
       </div>
@@ -1355,23 +1502,29 @@ export default function NsiRulesWizardPage() {
       {counterpartyModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-card">
-            <h4 style={{ marginTop: 0 }}>Новый контрагент</h4>
+            <h4 style={{ marginTop: 0 }}>РќРѕРІС‹Р№ РєРѕРЅС‚СЂР°РіРµРЅС‚</h4>
             {counterpartyErr && <div style={{ padding: 8, color: "#fca5a5" }}>{counterpartyErr}</div>}
             <label style={{ width: "100%" }}>
-              <small>Название</small><br />
+              <small>РќР°Р·РІР°РЅРёРµ</small><br />
               <input
                 value={counterpartyNameDraft}
                 onChange={(e) => setCounterpartyNameDraft(e.target.value)}
                 style={{ width: "100%" }}
-                placeholder="например: Компания А"
+                list="rule-counterparty-name-suggestions"
+                autoComplete="off"
+                placeholder="РЅР°РїСЂРёРјРµСЂ: РљРѕРјРїР°РЅРёСЏ Рђ"
               />
+              <datalist id="rule-counterparty-name-suggestions">
+                {counterpartyNameSuggestions.map((name) => <option key={name} value={name} />)}
+              </datalist>
+              {hasCounterpartyDuplicate && <small style={{ color: "#fca5a5" }}>Такое название уже есть в справочнике.</small>}
             </label>
             <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
               <button className="btn" type="button" onClick={() => setCounterpartyModalOpen(false)} disabled={counterpartySaving}>
-                Отмена
+                РћС‚РјРµРЅР°
               </button>
-              <button className="btn primary" type="button" onClick={createCounterpartyFromModal} disabled={counterpartySaving}>
-                {counterpartySaving ? "Сохраняем..." : "Создать"}
+              <button className="btn primary" type="button" onClick={createCounterpartyFromModal} disabled={counterpartySaving || hasCounterpartyDuplicate}>
+                {counterpartySaving ? "РЎРѕС…СЂР°РЅСЏРµРј..." : "РЎРѕР·РґР°С‚СЊ"}
               </button>
             </div>
           </div>

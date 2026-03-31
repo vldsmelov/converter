@@ -53,6 +53,18 @@ export default function NsiCounterpartiesPage() {
     if (!qq) return rows;
     return rows.filter((r) => r.name.toLowerCase().includes(qq));
   }, [rows, q]);
+  const normalizeName = (value: unknown) => String(value ?? "").trim().toLowerCase();
+  const newNameSuggestions = useMemo(() => {
+    const needle = normalizeName(newName);
+    const names = rows.map((r) => r.name).filter((x) => String(x ?? "").trim());
+    if (!needle) return names.slice(0, 10);
+    return names.filter((x) => normalizeName(x).includes(needle)).slice(0, 10);
+  }, [rows, newName]);
+  const newNameDuplicateExact = useMemo(() => {
+    const needle = normalizeName(newName);
+    if (!needle) return false;
+    return rows.some((r) => normalizeName(r.name) === needle);
+  }, [rows, newName]);
 
   function openCreateModal() {
     setNewName("");
@@ -65,6 +77,10 @@ export default function NsiCounterpartiesPage() {
     const name = newName.trim();
     if (!name) {
       setErr("Укажите название контрагента.");
+      return;
+    }
+    if (newNameDuplicateExact) {
+      setErr("Контрагент с таким названием уже существует. Укажите другое имя.");
       return;
     }
     setErr(null);
@@ -230,7 +246,17 @@ export default function NsiCounterpartiesPage() {
             <div className="row">
               <label style={{ flex: 1 }}>
                 <small>Название</small><br />
-                <input value={newName} onChange={(e) => setNewName(e.target.value)} style={{ width: "100%" }} />
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  style={{ width: "100%" }}
+                  list="counterparty-name-suggestions"
+                  autoComplete="off"
+                />
+                <datalist id="counterparty-name-suggestions">
+                  {newNameSuggestions.map((s) => <option key={s} value={s} />)}
+                </datalist>
+                {newNameDuplicateExact && <small style={{ color: "#fca5a5" }}>Такое название уже есть в справочнике.</small>}
               </label>
               <label className="row" style={{ gap: 6 }}>
                 <input type="checkbox" checked={newIsActive} onChange={(e) => setNewIsActive(e.target.checked)} />
@@ -239,7 +265,7 @@ export default function NsiCounterpartiesPage() {
             </div>
             <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
               <button className="btn" onClick={() => setModalOpen(false)} disabled={savingNew}>Отмена</button>
-              <button className="btn primary" onClick={createRow} disabled={savingNew}>
+              <button className="btn primary" onClick={createRow} disabled={savingNew || newNameDuplicateExact}>
                 {savingNew ? "Сохраняем..." : "Создать"}
               </button>
             </div>
