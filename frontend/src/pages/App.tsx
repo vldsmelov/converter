@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
+import AppFooter from "../components/AppFooter";
 import SiteTopbar from "../components/SiteTopbar";
 import { resolveHelpTopic } from "../lib/help";
 import AdminConsolePage from "./AdminConsolePage";
@@ -119,9 +120,7 @@ export default function App() {
           </Routes>
         </div>
 
-        <footer className="app-footer">
-          <small>by Модуль Цифровизация Проектных Задач</small>
-        </footer>
+        <AppFooter />
       </div>
     </>
   );

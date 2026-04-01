@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError, requestJson } from "../api/request";
+import AppFooter from "../components/AppFooter";
 import SiteTopbar from "../components/SiteTopbar";
 import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
@@ -350,10 +351,6 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     setSuggestedRuleUrl(null);
   }
 
-  function applyDefaultTarget() {
-    if (defaultTargetUom) setToUom(defaultTargetUom);
-  }
-
   function swapUoms() {
     setFromUom(toUom);
     setToUom(fromUom);
@@ -463,7 +460,6 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     <div className="card calculator-page">
       <PageHeader
         title="Калькулятор конвертации"
-        subtitle="Быстрый расчёт без создания накладной: выберите номенклатуру, ЕИ и количество."
       />
 
       {err && (
@@ -499,17 +495,6 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               ))}
             </select>
           </label>
-          <label className="field calculator-round-default-field">
-            <small>&nbsp;</small>
-            <span className="calculator-checkline">
-              <input
-                type="checkbox"
-                checked={useDefaultPrecision}
-                onChange={(e) => setUseDefaultPrecision(e.target.checked)}
-              />
-              <span>Точность по умолчанию</span>
-            </span>
-          </label>
           <label className="field calculator-precision-field">
             <small>Знаков после запятой</small>
             <input
@@ -520,6 +505,16 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               disabled={useDefaultPrecision}
               onChange={(e) => setRoundPrecision(Math.max(0, Math.min(8, toNum(e.target.value))))}
             />
+          </label>
+        </div>
+        <div className="row calculator-precision-toggle-row">
+          <label className="calculator-precision-toggle">
+            <input
+              type="checkbox"
+              checked={useDefaultPrecision}
+              onChange={(e) => setUseDefaultPrecision(e.target.checked)}
+            />
+            <span>Точность по умолчанию</span>
           </label>
         </div>
         <div className="row calculator-controls-row calculator-ei-row">
@@ -553,10 +548,6 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               ))}
             </select>
           </label>
-          <div className="field calculator-default-uom-field">
-            <small>&nbsp;</small>
-            <button className="btn calculator-inline-btn" onClick={applyDefaultTarget}>ЕИ по умолчанию</button>
-          </div>
         </div>
         <div className="row calculator-actions-row">
           <button className="btn primary calculator-calc-btn" onClick={calculate} disabled={calculating}>
@@ -637,6 +628,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
         <SiteTopbar publicMode />
         <div className="container app-shell">
           <div className="app-main">{pageContent}</div>
+          <AppFooter />
         </div>
       </>
     );
