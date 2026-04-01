@@ -585,6 +585,45 @@ small { color: var(--muted); }
   line-height: 1.2;
 }
 
+.nsi-rules-table .nsi-rules-group-row td {
+  background: color-mix(in srgb, var(--surface-2) 78%, var(--accent) 22%);
+  font-size: 13px;
+  font-weight: 600;
+  border-top: 1px solid var(--border-strong);
+}
+
+.nsi-rules-table .nsi-rules-group-row.expanded td {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.nsi-rules-group-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--text-color);
+  font-size: 13px;
+  line-height: 1;
+  margin-right: 6px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.nsi-rules-group-meta {
+  margin-left: 8px;
+  color: var(--muted-text);
+  font-weight: 500;
+}
+
+.nsi-rules-table .nsi-rules-subgroup-row td {
+  background: color-mix(in srgb, var(--surface) 84%, var(--surface-2) 16%);
+  font-size: 12px;
+  border-top: 1px dashed var(--border-color);
+}
+
+.nsi-rules-subgroup-meta {
+  margin-left: 8px;
+  color: var(--muted-text);
+}
+
 .nsi-rules-filter-row {
   align-items: flex-end;
   gap: 10px;

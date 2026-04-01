@@ -54,19 +54,19 @@ const PAIR_RULE_SPECS: Record<string, PairRuleSpec> = {
   "COUNT|MASS": {
     ruleType: "pcs_weight",
     paramKey: "kg_per_pc",
-    label: "Р’РµСЃ 1 С€С‚СѓРєРё (РєРі)",
+    label: "Вес 1 штуки (кг)",
     example: "0.023",
   },
   "LENGTH|MASS": {
     ruleType: "kg_per_m",
     paramKey: "kg_per_m",
-    label: "Р›РёРЅРµР№РЅР°СЏ РјР°СЃСЃР° (РєРі/Рј)",
+    label: "Линейная масса (кг/м)",
     example: "1",
   },
   "MASS|VOLUME": {
     ruleType: "density",
     paramKey: "density_kg_per_l",
-    label: "РџР»РѕС‚РЅРѕСЃС‚СЊ (РєРі/Р»)",
+    label: "Плотность (кг/л)",
     example: "1",
   },
 };
@@ -259,9 +259,9 @@ function ruleParamKey(ruleType: ItemRuleType): string {
 }
 
 function ruleHint(ruleType: ItemRuleType): string {
-  if (ruleType === "density") return "РћРіСЂР°РЅРёС‡РµРЅРёРµ: РњР°СЃСЃР° в†” РћР±СЉРµРј.";
-  if (ruleType === "kg_per_m") return "РћРіСЂР°РЅРёС‡РµРЅРёРµ: Р”Р»РёРЅР° в†” РњР°СЃСЃР°.";
-  return "РћРіСЂР°РЅРёС‡РµРЅРёРµ: РљРѕР»РёС‡РµСЃС‚РІРѕ в†” РњР°СЃСЃР° (РґР»СЏ РєРѕР»РёС‡РµСЃС‚РІР° РёСЃРїРѕР»СЊР·СѓР№С‚Рµ РЁРў).";
+  if (ruleType === "density") return "Ограничение: Масса ↔ Объем.";
+  if (ruleType === "kg_per_m") return "Ограничение: Длина ↔ Масса.";
+  return "Ограничение: Количество ↔ Масса (для количества используйте ШТ).";
 }
 
 function defaultItemPreset(ruleType: ItemRuleType, uoms: any[]): { fromId: number | null; toId: number | null; coef: string } {
@@ -446,8 +446,8 @@ export default function NsiRulesWizardPage() {
   }, [token, itemId, selectedItem?.id]);
 
   const exampleText = useMemo(() => {
-    if (scope === "global") return "РџСЂРёРјРµСЂ С‚РѕРІР°СЂР°: Р»СЋР±РѕР№ С‚РѕРІР°СЂ";
-    if (scope === "category") return `РџСЂРёРјРµСЂ С‚РѕРІР°СЂР°: Р»СЋР±РѕР№ С‚РѕРІР°СЂ РёР· РєР°С‚РµРіРѕСЂРёРё "${itemCatById.get(categoryId ?? -1)?.name ?? "-"}"`;
+    if (scope === "global") return "Пример товара: любой товар";
+    if (scope === "category") return `Пример товара: любой товар из категории "${itemCatById.get(categoryId ?? -1)?.name ?? "-"}"`;
     const itemTitle = selectedItem?.name ?? (itemId ? "#" + String(itemId) : "-");
     return "\u041f\u0440\u0438\u043c\u0435\u0440 \u0442\u043e\u0432\u0430\u0440\u0430: " + itemTitle;
   }, [scope, categoryId, itemId, selectedItem, itemCatById]);
@@ -496,44 +496,44 @@ export default function NsiRulesWizardPage() {
 
   const validations = useMemo(() => {
     const v: string[] = [];
-    if (!fromUom || !toUom) v.push("Р’С‹Р±РµСЂРёС‚Рµ РІС…РѕРґСЏС‰СѓСЋ Рё РёС‚РѕРіРѕРІСѓСЋ Р•Р.");
-    if (!useCompositeMode && n(coef) <= 0) v.push("РџР°СЂР°РјРµС‚СЂ РєРѕСЌС„С„РёС†РёРµРЅС‚Р° РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ > 0.");
+    if (!fromUom || !toUom) v.push("Выберите входящую и итоговую ЕИ.");
+    if (!useCompositeMode && n(coef) <= 0) v.push("Параметр коэффициента должен быть > 0.");
 
     if (scope === "global") {
       if (fromUom && toUom && fromUom.category !== toUom.category) {
-        v.push("Р“Р»РѕР±Р°Р»СЊРЅС‹Рµ РїСЂР°РІРёР»Р° РІРѕР·РјРѕР¶РЅС‹ С‚РѕР»СЊРєРѕ РІРЅСѓС‚СЂРё РѕРґРЅРѕР№ РєР°С‚РµРіРѕСЂРёРё Р•Р.");
+        v.push("Глобальные правила возможны только внутри одной категории ЕИ.");
       }
     }
 
     if (scope === "category") {
-      if (!categoryId) v.push("Р’С‹Р±РµСЂРёС‚Рµ РєР°С‚РµРіРѕСЂРёСЋ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹.");
-      if (fromUom && fromCatCode !== "COUNT") v.push("Р”Р»СЏ РїСЂР°РІРёР»Р° РєР°С‚РµРіРѕСЂРёРё РІС…РѕРґСЏС‰Р°СЏ Р•Р РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РёР· РєР°С‚РµРіРѕСЂРёРё В«РљРѕР»РёС‡РµСЃС‚РІРѕВ».");
-      if (toUom && toCatCode !== "MASS") v.push("Р”Р»СЏ РїСЂР°РІРёР»Р° РєР°С‚РµРіРѕСЂРёРё РёС‚РѕРіРѕРІР°СЏ Р•Р РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РёР· РєР°С‚РµРіРѕСЂРёРё В«РњР°СЃСЃР°В».");
+      if (!categoryId) v.push("Выберите категорию номенклатуры.");
+      if (fromUom && fromCatCode !== "COUNT") v.push("Для правила категории входящая ЕИ должна быть из категории «Количество».");
+      if (toUom && toCatCode !== "MASS") v.push("Для правила категории итоговая ЕИ должна быть из категории «Масса».");
     }
 
     if (scope === "item") {
-      if (!itemId) v.push("Р’С‹Р±РµСЂРёС‚Рµ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂРЅСѓСЋ РїРѕР·РёС†РёСЋ.");
+      if (!itemId) v.push("Выберите номенклатурную позицию.");
       if (useCompositeMode) {
         compositeRuleSteps.forEach((step, idx) => {
           const id = compositeStepId(step);
           if (n(compositeParams[id]) <= 0) {
-            v.push(`Р—Р°РїРѕР»РЅРёС‚Рµ РєРѕСЌС„С„РёС†РёРµРЅС‚ РґР»СЏ С€Р°РіР° ${idx + 1} (${step.paramKey}).`);
+            v.push(`Заполните коэффициент для шага ${idx + 1} (${step.paramKey}).`);
           }
         });
       } else {
         if (!ruleTypeFitsPair(itemRuleType, fromCatCode, toCatCode)) {
-          v.push(`Р’С‹Р±СЂР°РЅРЅС‹Р№ С‚РёРї РїСЂР°РІРёР»Р° РЅРµ РїРѕРґС…РѕРґРёС‚ РґР»СЏ РїР°СЂС‹ РєР°С‚РµРіРѕСЂРёР№ (${uomCategoryLabel(fromCatCode)} -> ${uomCategoryLabel(toCatCode)}).`);
+          v.push(`Выбранный тип правила не подходит для пары категорий (${uomCategoryLabel(fromCatCode)} -> ${uomCategoryLabel(toCatCode)}).`);
         }
 
         if (variantMode) {
           const seen = new Set<string>();
           itemRuleVariants.forEach((vr, idx) => {
             const supplier = vr.supplier_code.trim();
-            if (!supplier) v.push(`РЈРєР°Р¶РёС‚Рµ РЅР°Р·РІР°РЅРёРµ РїРѕСЃС‚Р°РІС‰РёРєР° РґР»СЏ РІР°СЂРёР°РЅС‚Р° #${idx + 1}.`);
-            if (n(vr.coef) <= 0) v.push(`РљРѕСЌС„С„РёС†РёРµРЅС‚ РІР°СЂРёР°РЅС‚Р° #${idx + 1} РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ > 0.`);
+            if (!supplier) v.push(`Укажите название поставщика для варианта #${idx + 1}.`);
+            if (n(vr.coef) <= 0) v.push(`Коэффициент варианта #${idx + 1} должен быть > 0.`);
             if (supplier) {
               const key = supplier.toLowerCase();
-              if (seen.has(key)) v.push(`Р”СѓР±Р»РёСЂСѓРµС‚СЃСЏ РїРѕСЃС‚Р°РІС‰РёРє "${supplier}" РІ РІР°СЂРёР°РЅС‚Р°С….`);
+              if (seen.has(key)) v.push(`Дублируется поставщик "${supplier}" в вариантах.`);
               seen.add(key);
             }
           });
@@ -578,7 +578,7 @@ export default function NsiRulesWizardPage() {
 
       if (isEditMode) {
         if (!editId) {
-          throw new Error("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїСЂР°РІРёР»Р°.");
+          throw new Error("Некорректный идентификатор правила.");
         }
 
         if (editScope === "global") {
@@ -755,11 +755,11 @@ export default function NsiRulesWizardPage() {
   }, [token, isEditMode, editId, editScope, location.search]);
 
   const coefLabel = useMemo(() => {
-    if (scope === "global") return "РљРѕСЌС„С„РёС†РёРµРЅС‚ РїРµСЂРµСЃС‡РµС‚Р°";
-    if (scope === "category") return "РљРѕСЌС„С„РёС†РёРµРЅС‚ (СЃРєРѕР»СЊРєРѕ РёС‚РѕРіРѕРІРѕР№ Р•Р РІ 1 РІС…РѕРґСЏС‰РµР№)";
-    if (itemRuleType === "density") return "РџР»РѕС‚РЅРѕСЃС‚СЊ (РєРі/Р»)";
-    if (itemRuleType === "kg_per_m") return "Р›РёРЅРµР№РЅР°СЏ РјР°СЃСЃР° (РєРі/Рј)";
-    return "Р’РµСЃ 1 С€С‚СѓРєРё (РєРі)";
+    if (scope === "global") return "Коэффициент пересчета";
+    if (scope === "category") return "Коэффициент (сколько итоговой ЕИ в 1 входящей)";
+    if (itemRuleType === "density") return "Плотность (кг/л)";
+    if (itemRuleType === "kg_per_m") return "Линейная масса (кг/м)";
+    return "Вес 1 штуки (кг)";
   }, [scope, itemRuleType]);
 
   function baseItemConditions(): Record<string, unknown> {
@@ -796,12 +796,12 @@ export default function NsiRulesWizardPage() {
     if (!token) return;
     const name = counterpartyNameDraft.trim();
     if (!name) {
-      setCounterpartyErr("РЈРєР°Р¶РёС‚Рµ РЅР°Р·РІР°РЅРёРµ РєРѕРЅС‚СЂР°РіРµРЅС‚Р°.");
+      setCounterpartyErr("Укажите название контрагента.");
       return;
     }
 
     if (hasCounterpartyDuplicate) {
-      setCounterpartyErr("РљРѕРЅС‚СЂР°РіРµРЅС‚ СЃ С‚Р°РєРёРј РЅР°Р·РІР°РЅРёРµРј СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚. РЈРєР°Р¶РёС‚Рµ РґСЂСѓРіРѕРµ РёРјСЏ.");
+      setCounterpartyErr("Контрагент с таким названием уже существует. Укажите другое имя.");
       return;
     }
     setCounterpartyErr(null);
@@ -866,7 +866,7 @@ export default function NsiRulesWizardPage() {
     if (!token || !canCreateDefaultField || !makeDefaultField) return;
 
     const fieldCode = defaultFieldCode.trim();
-    if (!fieldCode) throw new Error("РЈРєР°Р¶РёС‚Рµ РєРѕРґ РїРѕР»СЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ.");
+    if (!fieldCode) throw new Error("Укажите код поля по умолчанию.");
 
     try {
       await requestJson({
@@ -898,7 +898,7 @@ export default function NsiRulesWizardPage() {
     if (!canSave) return;
 
     if (isEditMode && !editId) {
-      setErr("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїСЂР°РІРёР»Р°.");
+      setErr("Некорректный идентификатор правила.");
       return;
     }
 
@@ -939,13 +939,13 @@ export default function NsiRulesWizardPage() {
         const conditionsForSave = itemConditionsForSave();
 
         if (useCompositeMode) {
-          if (!itemId) throw new Error("Р’С‹Р±РµСЂРёС‚Рµ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂРЅСѓСЋ РїРѕР·РёС†РёСЋ.");
+          if (!itemId) throw new Error("Выберите номенклатурную позицию.");
 
           for (const step of compositeRuleSteps) {
             const fromCategoryId = catIdByCode.get(up(step.fromCategory));
             const toCategoryId = catIdByCode.get(up(step.toCategory));
             if (!fromCategoryId || !toCategoryId) {
-              throw new Error(`РќРµ РЅР°Р№РґРµРЅС‹ РєР°С‚РµРіРѕСЂРёРё Р•Р РґР»СЏ С€Р°РіР° ${uomCategoryLabel(step.fromCategory)} -> ${uomCategoryLabel(step.toCategory)}.`);
+              throw new Error(`Не найдены категории ЕИ для шага ${uomCategoryLabel(step.fromCategory)} -> ${uomCategoryLabel(step.toCategory)}.`);
             }
 
             const id = compositeStepId(step);
@@ -1128,39 +1128,39 @@ export default function NsiRulesWizardPage() {
     }
   }
 
-  const pageTitle = isEditMode ? "Р РµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ РїСЂР°РІРёР»Р°" : "РЎРѕР·РґР°РЅРёРµ РїСЂР°РІРёР»Р°";
+  const pageTitle = isEditMode ? "Редактирование правила" : "Создание правила";
   const pageSubtitle = isEditMode
-    ? "РР·РјРµРЅРёС‚Рµ РїР°СЂР°РјРµС‚СЂС‹ Рё СЃРѕС…СЂР°РЅРёС‚Рµ РїСЂР°РІРёР»Рѕ."
-    : "РЎРѕР·РґР°Р№С‚Рµ РїСЂР°РІРёР»Рѕ РїРµСЂРµРІРѕРґР° РјРµР¶РґСѓ Р•Р. Р”Р»СЏ РјРµР¶РєР°С‚РµРіРѕСЂРёР№РЅРѕРіРѕ РїРµСЂРµРІРѕРґР° РІС‹Р±РёСЂР°Р№С‚Рµ С‚РёРї РїСЂР°РІРёР»Р° РІ Р±Р»РѕРєРµ РїР°СЂР°РјРµС‚СЂРѕРІ.";
+    ? "Измените параметры и сохраните правило."
+    : "Создайте правило перевода между ЕИ. Для межкатегорийного перевода выбирайте тип правила в блоке параметров.";
   const submitLabel = isEditMode
-    ? "РЎРѕС…СЂР°РЅРёС‚СЊ"
-    : (useCompositeMode ? "РЎРѕР·РґР°С‚СЊ РЅР°Р±РѕСЂ РїСЂР°РІРёР»" : (variantMode ? "РЎРѕР·РґР°С‚СЊ РїСЂР°РІРёР»Рѕ Рё РІР°СЂРёР°РЅС‚С‹" : "РЎРѕР·РґР°С‚СЊ РїСЂР°РІРёР»Рѕ"));
+    ? "Сохранить"
+    : (useCompositeMode ? "Создать набор правил" : (variantMode ? "Создать правило и варианты" : "Создать правило"));
 
   return (
     <div className="card">
       <PageHeader
         title={pageTitle}
         subtitle={pageSubtitle}
-        right={<button className="btn" onClick={() => nav("/nsi/rules")}>РћС‚РјРµРЅР°</button>}
+        right={<button className="btn" onClick={() => nav("/nsi/rules")}>Отмена</button>}
       />
 
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>РўРёРї РїСЂР°РІРёР»Р°</h4>
+        <h4 style={{ marginTop: 0 }}>Тип правила</h4>
         <div className="row">
           <label>
-            <small>РљР°РєРѕРµ РїСЂР°РІРёР»Рѕ СЃРѕР·РґР°РµРј?</small><br />
+            <small>Какое правило создаем?</small><br />
             <select value={scope} onChange={(e) => setScope(e.target.value as Scope)} disabled={isEditMode}>
-              <option value="global">Р“Р»РѕР±Р°Р»СЊРЅРѕРµ (РґР»СЏ РІСЃРµС…)</option>
-              <option value="category">Р”Р»СЏ РєР°С‚РµРіРѕСЂРёРё</option>
-              <option value="item">Р”Р»СЏ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂРЅРѕР№ РїРѕР·РёС†РёРё</option>
+              <option value="global">Глобальное (для всех)</option>
+              <option value="category">Для категории</option>
+              <option value="item">Для номенклатурной позиции</option>
             </select>
           </label>
 
           {scope === "category" && (
             <label style={{ flex: 1 }}>
-              <small>РљР°С‚РµРіРѕСЂРёСЏ</small><br />
+              <small>Категория</small><br />
               <select value={categoryId ?? ""} onChange={(e) => setCategoryId(toNum(e.target.value))} style={{ width: "100%" }}>
                 {itemCats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -1170,7 +1170,7 @@ export default function NsiRulesWizardPage() {
           {scope === "item" && (
             <>
               <label style={{ flex: 1 }}>
-                <small>РќРѕРјРµРЅРєР»Р°С‚СѓСЂР°</small><br />
+                <small>Номенклатура</small><br />
                 <ItemLookup
                   token={token}
                   value={itemId}
@@ -1182,11 +1182,11 @@ export default function NsiRulesWizardPage() {
               </label>
 
               <label>
-                <small>РўРёРї РєРѕРЅРІРµСЂС‚Р°С†РёРё</small><br />
+                <small>Тип конвертации</small><br />
                 <select value={itemRuleType} onChange={(e) => setItemRuleType(e.target.value as ItemRuleType)} disabled={useCompositeMode}>
-                  <option value="pcs_weight">РџРѕ РІРµСЃСѓ С€С‚СѓРєРё</option>
-                  <option value="kg_per_m">РџРѕ Р»РёРЅРµР№РЅРѕР№ РјР°СЃСЃРµ</option>
-                  <option value="density">РџРѕ РїР»РѕС‚РЅРѕСЃС‚Рё</option>
+                  <option value="pcs_weight">По весу штуки</option>
+                  <option value="kg_per_m">По линейной массе</option>
+                  <option value="density">По плотности</option>
                 </select>
               </label>
             </>
@@ -1196,27 +1196,27 @@ export default function NsiRulesWizardPage() {
         {useCompositeMode && (
           <div style={{ marginTop: 8 }}>
             <small>
-              РџСЂСЏРјРѕРіРѕ РїСЂР°РІРёР»Р° РґР»СЏ РїР°СЂС‹ {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)} РЅРµС‚. Р‘СѓРґРµС‚ СЃРѕР·РґР°РЅ РЅР°Р±РѕСЂ РїСЂР°РІРёР» РїРѕ С€Р°РіР°Рј С‡РµСЂРµР· РїСЂРѕРјРµР¶СѓС‚РѕС‡РЅСѓСЋ РєР°С‚РµРіРѕСЂРёСЋ.
+              Прямого правила для пары {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)} нет. Будет создан набор правил по шагам через промежуточную категорию.
             </small>
           </div>
         )}
 
-        {isEditMode && <div style={{ marginTop: 8 }}><small>РўРёРї РѕР±Р»Р°СЃС‚Рё С„РёРєСЃРёСЂРѕРІР°РЅ РІ СЂРµР¶РёРјРµ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ.</small></div>}
+        {isEditMode && <div style={{ marginTop: 8 }}><small>Тип области фиксирован в режиме редактирования.</small></div>}
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>РџР°СЂР°РјРµС‚СЂС‹ РїСЂР°РІРёР»Р°</h4>
+        <h4 style={{ marginTop: 0 }}>Параметры правила</h4>
 
         <div className="row">
           <label>
-            <small>РІС…РѕРґСЏС‰Р°СЏ Р•Р</small><br />
+            <small>входящая ЕИ</small><br />
             <select value={fromUomId ?? ""} onChange={(e) => setFromUomId(toNum(e.target.value))}>
               {uoms.map((u: any) => <option key={u.id} value={u.id}>{uomLabel(u.code)} ({uomCategoryLabel(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
             </select>
           </label>
 
           <label>
-            <small>РёС‚РѕРіРѕРІР°СЏ Р•Р</small><br />
+            <small>итоговая ЕИ</small><br />
             <select value={toUomId ?? ""} onChange={(e) => setToUomId(toNum(e.target.value))}>
               {uoms.map((u: any) => <option key={u.id} value={u.id}>{uomLabel(u.code)} ({uomCategoryLabel(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
             </select>
@@ -1230,11 +1230,11 @@ export default function NsiRulesWizardPage() {
           )}
 
           <label>
-            <small>РЎС‚Р°С‚СѓСЃ</small><br />
+            <small>Статус</small><br />
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="active">РђРєС‚РёРІРЅС‹Р№</option>
-              <option value="draft">Р§РµСЂРЅРѕРІРёРє</option>
-              <option value="archived">РђСЂС…РёРІ</option>
+              <option value="active">Активный</option>
+              <option value="draft">Черновик</option>
+              <option value="archived">Архив</option>
             </select>
           </label>
         </div>
@@ -1242,20 +1242,20 @@ export default function NsiRulesWizardPage() {
         {scope === "item" && !variantMode && (
           <div className="row" style={{ marginTop: 8 }}>
             <label>
-              <small>РџРѕСЃС‚Р°РІС‰РёРє (РІР°СЂРёР°РЅС‚ РїСЂР°РІРёР»Р°, РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
+              <small>Поставщик (вариант правила, опционально)</small><br />
               <select
                 value={itemSupplierCode}
                 onChange={(e) => setItemSupplierCode(e.target.value)}
               >
-                <option value="">РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</option>
+                <option value="">По умолчанию</option>
                 {supplierOptions(itemSupplierCode).map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
             </label>
-            <button type="button" className="btn btn-tight" onClick={openCounterpartyModal}>РќРѕРІС‹Р№ РєРѕРЅС‚СЂР°РіРµРЅС‚</button>
+            <button type="button" className="btn btn-tight" onClick={openCounterpartyModal}>Новый контрагент</button>
             <small>
-              Р•СЃР»Рё РїРѕСЃС‚Р°РІС‰РёРє РЅРµ СѓРєР°Р·Р°РЅ, РїСЂР°РІРёР»Рѕ Р±СѓРґРµС‚ РѕР±С‰РёРј РґР»СЏ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹.
+              Если поставщик не указан, правило будет общим для номенклатуры.
             </small>
           </div>
         )}
@@ -1263,27 +1263,27 @@ export default function NsiRulesWizardPage() {
         {scope === "category" && (
           <div className="row" style={{ marginTop: 8 }}>
             <label>
-              <small>РџРѕСЃС‚Р°РІС‰РёРє (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
+              <small>Поставщик (опционально)</small><br />
               <select
                 value={categoryRuleMeta.supplier_code}
                 onChange={(e) => setCategoryRuleMeta((v) => ({ ...v, supplier_code: e.target.value }))}
               >
-                <option value="">РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</option>
+                <option value="">По умолчанию</option>
                 {supplierOptions(categoryRuleMeta.supplier_code).map((name) => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
             </label>
-            <button type="button" className="btn btn-tight" onClick={openCounterpartyModal}>РќРѕРІС‹Р№ РєРѕРЅС‚СЂР°РіРµРЅС‚</button>
+            <button type="button" className="btn btn-tight" onClick={openCounterpartyModal}>Новый контрагент</button>
             <label>
-              <small>РЁС‚СЂРёС…РєРѕРґ (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
+              <small>Штрихкод (опционально)</small><br />
               <input
                 value={categoryRuleMeta.barcode}
                 onChange={(e) => setCategoryRuleMeta((v) => ({ ...v, barcode: e.target.value }))}
               />
             </label>
             <label>
-              <small>Р”РµР№СЃС‚РІСѓРµС‚ СЃ</small><br />
+              <small>Действует с</small><br />
               <input
                 type="date"
                 value={categoryRuleMeta.effective_from ?? ""}
@@ -1291,7 +1291,7 @@ export default function NsiRulesWizardPage() {
               />
             </label>
             <label>
-              <small>Р”РµР№СЃС‚РІСѓРµС‚ РїРѕ</small><br />
+              <small>Действует по</small><br />
               <input
                 type="date"
                 value={categoryRuleMeta.effective_to ?? ""}
@@ -1303,27 +1303,27 @@ export default function NsiRulesWizardPage() {
 
         {variantMode && (
           <div style={{ marginTop: 10 }}>
-            <small><b>Р’Р°СЂРёР°РЅС‚С‹ РїРµСЂРµРІРѕРґР° РїРѕ РїРѕСЃС‚Р°РІС‰РёРєСѓ</b></small>
+            <small><b>Варианты перевода по поставщику</b></small>
             <div className="table-wrap" style={{ marginTop: 6 }}>
               <table className="compact-table">
                 <thead>
                   <tr>
-                    <th>Р’Р°СЂРёР°РЅС‚</th>
-                    <th>РџРѕСЃС‚Р°РІС‰РёРє</th>
+                    <th>Вариант</th>
+                    <th>Поставщик</th>
                     <th>{coefLabel}</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td>РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</td>
-                    <td>вЂ”</td>
+                    <td>По умолчанию</td>
+                    <td>—</td>
                     <td><input value={coef} onChange={(e) => setCoef(e.target.value)} style={{ width: 180 }} /></td>
                     <td></td>
                   </tr>
                   {itemRuleVariants.map((vr, idx) => (
                     <tr key={vr.key}>
-                      <td>Р’Р°СЂРёР°РЅС‚ #{idx + 1}</td>
+                      <td>Вариант #{idx + 1}</td>
                       <td>
                         <select
                           value={vr.supplier_code}
@@ -1332,7 +1332,7 @@ export default function NsiRulesWizardPage() {
                           )))}
                           style={{ width: 220 }}
                         >
-                          <option value="">Р’С‹Р±РµСЂРёС‚Рµ РєРѕРЅС‚СЂР°РіРµРЅС‚Р°</option>
+                          <option value="">Выберите контрагента</option>
                           {supplierOptions(vr.supplier_code).map((name) => (
                             <option key={name} value={name}>{name}</option>
                           ))}
@@ -1348,7 +1348,7 @@ export default function NsiRulesWizardPage() {
                         />
                       </td>
                       <td style={{ textAlign: "right" }}>
-                        <button className="btn btn-tight danger" type="button" onClick={() => removeVariantRow(vr.key)}>РЈРґР°Р»РёС‚СЊ</button>
+                        <button className="btn btn-tight danger" type="button" onClick={() => removeVariantRow(vr.key)}>Удалить</button>
                       </td>
                     </tr>
                   ))}
@@ -1357,10 +1357,10 @@ export default function NsiRulesWizardPage() {
             </div>
             <div className="row" style={{ marginTop: 8 }}>
               <button className="btn btn-tight" type="button" onClick={addVariantRow}>
-                Р”РѕР±Р°РІРёС‚СЊ РІР°СЂРёР°РЅС‚
+                Добавить вариант
               </button>
               <button className="btn btn-tight" type="button" onClick={openCounterpartyModal}>
-                РќРѕРІС‹Р№ РєРѕРЅС‚СЂР°РіРµРЅС‚
+                Новый контрагент
               </button>
             </div>
           </div>
@@ -1372,7 +1372,7 @@ export default function NsiRulesWizardPage() {
               const id = compositeStepId(step);
               return (
                 <div key={id} className="row" style={{ alignItems: "center", gap: 8, marginTop: idx === 0 ? 0 : 6 }}>
-                  <span className="badge">РЁР°Рі {idx + 1}</span>
+                  <span className="badge">Шаг {idx + 1}</span>
                   <small>{uomCategoryLabel(step.fromCategory)} {"->"} {uomCategoryLabel(step.toCategory)} ({ruleTypeLabel(step.ruleType)})</small>
                   <input
                     value={compositeParams[id] ?? ""}
@@ -1387,22 +1387,22 @@ export default function NsiRulesWizardPage() {
         )}
 
         <div style={{ marginTop: 10 }}>
-          {scope === "global" && <small>РћРіСЂР°РЅРёС‡РµРЅРёРµ: РѕР±Рµ Р•Р РґРѕР»Р¶РЅС‹ Р±С‹С‚СЊ РІ <b>РѕРґРЅРѕР№ РєР°С‚РµРіРѕСЂРёРё</b>. РЎРµР№С‡Р°СЃ: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
-          {scope === "category" && <small>РћРіСЂР°РЅРёС‡РµРЅРёРµ: РљРѕР»РёС‡РµСЃС‚РІРѕ {"->"} РњР°СЃСЃР° (РїСЂРёРјРµСЂ: РњР•РЁРћРљ {"->"} РљР“). РЎРµР№С‡Р°СЃ: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
-          {scope === "item" && !useCompositeMode && <small>{ruleHint(itemRuleType)} РЎРµР№С‡Р°СЃ: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
-          {scope === "item" && useCompositeMode && <small>РЎРѕСЃС‚Р°РІРЅРѕР№ РїРµСЂРµРІРѕРґ. РЎРµР№С‡Р°СЃ: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
+          {scope === "global" && <small>Ограничение: обе ЕИ должны быть в <b>одной категории</b>. Сейчас: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
+          {scope === "category" && <small>Ограничение: Количество {"->"} Масса (пример: МЕШОК {"->"} КГ). Сейчас: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
+          {scope === "item" && !useCompositeMode && <small>{ruleHint(itemRuleType)} Сейчас: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
+          {scope === "item" && useCompositeMode && <small>Составной перевод. Сейчас: {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)}</small>}
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 12 }}>
-        <h4 style={{ marginTop: 0 }}>РџСЂРёРјРµСЂ РїРµСЂРµРІРѕРґР°</h4>
+        <h4 style={{ marginTop: 0 }}>Пример перевода</h4>
 
         <table>
           <thead>
             <tr>
-              <th>РџСЂРёРјРµСЂ С‚РѕРІР°СЂР°</th>
-              <th>РІС…РѕРґСЏС‰Р°СЏ Р•Р</th>
-              <th>РёСЃС…РѕРґСЏС‰Р°СЏ Р•Р</th>
+              <th>Пример товара</th>
+              <th>входящая ЕИ</th>
+              <th>исходящая ЕИ</th>
             </tr>
           </thead>
           <tbody>
@@ -1427,7 +1427,7 @@ export default function NsiRulesWizardPage() {
         {scope === "item" && !useCompositeMode && !variantMode ? (
           <div style={{ marginTop: 8 }}>
             <small>
-              РџР°СЂР°РјРµС‚СЂ РґР»СЏ С‚РёРїР° РїСЂР°РІРёР»Р°: <b>{ruleParamLabel(ruleParamKey(itemRuleType))}</b>. РџСЂРёРјРµСЂ СЂР°СЃСЃС‡РёС‚С‹РІР°РµС‚СЃСЏ РёР· РІС‹Р±СЂР°РЅРЅС‹С… Р•Р Рё РєРѕСЌС„С„РёС†РёРµРЅС‚Р°.
+              Параметр для типа правила: <b>{ruleParamLabel(ruleParamKey(itemRuleType))}</b>. Пример рассчитывается из выбранных ЕИ и коэффициента.
             </small>
           </div>
         ) : null}
@@ -1435,7 +1435,7 @@ export default function NsiRulesWizardPage() {
         {variantMode ? (
           <div style={{ marginTop: 8 }}>
             <small>
-              РџСЂРё СЃРѕС…СЂР°РЅРµРЅРёРё Р±СѓРґРµС‚ СЃРѕР·РґР°РЅРѕ РѕР±С‰РµРµ РїСЂР°РІРёР»Рѕ В«РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋВ» Рё РѕС‚РґРµР»СЊРЅС‹Рµ РїСЂР°РІРёР»Р° РґР»СЏ РєР°Р¶РґРѕРіРѕ РІР°СЂРёР°РЅС‚Р° РїРѕСЃС‚Р°РІС‰РёРєР°.
+              При сохранении будет создано общее правило «По умолчанию» и отдельные правила для каждого варианта поставщика.
             </small>
           </div>
         ) : null}
@@ -1443,7 +1443,7 @@ export default function NsiRulesWizardPage() {
         {scope === "item" && useCompositeMode ? (
           <div style={{ marginTop: 8 }}>
             <small>
-              Р”Р»СЏ РїР°СЂС‹ {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)} С‚СЂРµР±СѓРµС‚СЃСЏ РЅРµСЃРєРѕР»СЊРєРѕ РїР°СЂР°РјРµС‚СЂРѕРІ: {compositeRuleSteps.map((s) => ruleParamLabel(s.paramKey)).join(", ")}.
+              Для пары {uomCategoryLabel(fromCatCode)} {"->"} {uomCategoryLabel(toCatCode)} требуется несколько параметров: {compositeRuleSteps.map((s) => ruleParamLabel(s.paramKey)).join(", ")}.
             </small>
           </div>
         ) : null}
@@ -1460,33 +1460,33 @@ export default function NsiRulesWizardPage() {
           <div style={{ marginTop: 12 }}>
             <label className="row" style={{ gap: 8 }}>
               <input type="checkbox" checked={makeDefaultField} onChange={(e) => setMakeDefaultField(e.target.checked)} />
-              <small>РїРѕР»Рµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</small>
+              <small>поле по умолчанию</small>
             </label>
             {makeDefaultField && (
               <div className="row" style={{ marginTop: 8 }}>
                 <label>
-                  <small>РљРѕРґ РїРѕР»СЏ</small><br />
+                  <small>Код поля</small><br />
                   <input value={defaultFieldCode} onChange={(e) => setDefaultFieldCode(e.target.value)} />
                 </label>
                 <label>
-                  <small>РќР°Р·РІР°РЅРёРµ</small><br />
+                  <small>Название</small><br />
                   <input value={defaultFieldLabel} onChange={(e) => setDefaultFieldLabel(e.target.value)} />
                 </label>
                 <label>
-                  <small>РўРёРї</small><br />
+                  <small>Тип</small><br />
                   <select value={defaultFieldType} onChange={(e) => setDefaultFieldType(e.target.value as "string" | "number" | "boolean")}>
-                    <option value="string">РЎС‚СЂРѕРєР°</option>
-                    <option value="number">Р§РёСЃР»Рѕ</option>
-                    <option value="boolean">Р›РѕРіРёС‡РµСЃРєРѕРµ</option>
+                    <option value="string">Строка</option>
+                    <option value="number">Число</option>
+                    <option value="boolean">Логическое</option>
                   </select>
                 </label>
                 <label>
-                  <small>Р—РЅР°С‡РµРЅРёРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</small><br />
+                  <small>Значение по умолчанию</small><br />
                   <input value={defaultFieldValue} onChange={(e) => setDefaultFieldValue(e.target.value)} />
                 </label>
                 <label className="row" style={{ gap: 6 }}>
                   <input type="checkbox" checked={defaultFieldRequired} onChange={(e) => setDefaultFieldRequired(e.target.checked)} />
-                  <small>РѕР±СЏР·Р°С‚РµР»СЊРЅРѕРµ</small>
+                  <small>обязательное</small>
                 </label>
               </div>
             )}
@@ -1494,7 +1494,7 @@ export default function NsiRulesWizardPage() {
         )}
 
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={() => nav("/nsi/rules")}>РћС‚РјРµРЅР°</button>
+          <button className="btn" onClick={() => nav("/nsi/rules")}>Отмена</button>
           <button className="btn primary" onClick={saveRule} disabled={!canSave}>{submitLabel}</button>
         </div>
       </div>
@@ -1502,29 +1502,29 @@ export default function NsiRulesWizardPage() {
       {counterpartyModalOpen && (
         <div className="modal-backdrop">
           <div className="modal-card">
-            <h4 style={{ marginTop: 0 }}>РќРѕРІС‹Р№ РєРѕРЅС‚СЂР°РіРµРЅС‚</h4>
+            <h4 style={{ marginTop: 0 }}>Новый контрагент</h4>
             {counterpartyErr && <div style={{ padding: 8, color: "#fca5a5" }}>{counterpartyErr}</div>}
             <label style={{ width: "100%" }}>
-              <small>РќР°Р·РІР°РЅРёРµ</small><br />
+              <small>Название</small><br />
               <input
                 value={counterpartyNameDraft}
                 onChange={(e) => setCounterpartyNameDraft(e.target.value)}
                 style={{ width: "100%" }}
                 list="rule-counterparty-name-suggestions"
                 autoComplete="off"
-                placeholder="РЅР°РїСЂРёРјРµСЂ: РљРѕРјРїР°РЅРёСЏ Рђ"
+                placeholder="например: Компания А"
               />
               <datalist id="rule-counterparty-name-suggestions">
                 {counterpartyNameSuggestions.map((name) => <option key={name} value={name} />)}
               </datalist>
-              {hasCounterpartyDuplicate && <small style={{ color: "#fca5a5" }}>Такое название уже есть в справочнике.</small>}
+              {hasCounterpartyDuplicate && <small style={{ color: "#fca5a5" }}>Такой контрагент уже есть в справочнике.</small>}
             </label>
             <div className="row" style={{ justifyContent: "flex-end", marginTop: 12 }}>
               <button className="btn" type="button" onClick={() => setCounterpartyModalOpen(false)} disabled={counterpartySaving}>
-                РћС‚РјРµРЅР°
+                Отмена
               </button>
               <button className="btn primary" type="button" onClick={createCounterpartyFromModal} disabled={counterpartySaving || hasCounterpartyDuplicate}>
-                {counterpartySaving ? "РЎРѕС…СЂР°РЅСЏРµРј..." : "РЎРѕР·РґР°С‚СЊ"}
+                {counterpartySaving ? "Сохраняем..." : "Создать"}
               </button>
             </div>
           </div>

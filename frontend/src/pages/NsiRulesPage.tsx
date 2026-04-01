@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson } from "../api/request";
 import PageHeader from "../components/PageHeader";
-import { conditionLabel, ruleParamLabel, ruleTypeLabel } from "../lib/ruLabels";
+import { conditionLabel, ruleParamLabel, ruleTypeLabel, uomCategoryLabel } from "../lib/ruLabels";
 
 type Uom = any;
+type UomCat = any;
 type Item = any;
 type ItemCat = any;
 type GlobalRule = any;
@@ -77,6 +78,10 @@ function parseRows(payload: any): any[] {
   return [];
 }
 
+function up(v: unknown): string {
+  return String(v ?? "").toUpperCase();
+}
+
 function readStoredVisibleColumns<T extends string>(
   storageKey: string,
   columns: Array<ColumnDef<T>>,
@@ -104,6 +109,7 @@ export default function NsiRulesPage() {
   const nav = useNavigate();
 
   const [uoms, setUoms] = useState<Uom[]>([]);
+  const [uomCats, setUomCats] = useState<UomCat[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [itemCats, setItemCats] = useState<ItemCat[]>([]);
 
@@ -127,9 +133,11 @@ export default function NsiRulesPage() {
     () => readStoredVisibleColumns(ITEM_COLUMNS_STORAGE_KEY, ITEM_COLUMNS, DEFAULT_ITEM_COLUMNS)
   );
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const [expandedItemGroups, setExpandedItemGroups] = useState<Record<string, boolean>>({});
   const columnsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
+  const uomCatsById = useMemo(() => new Map<number, any>(uomCats.map((c: any) => [c.id, c])), [uomCats]);
   const uomCode = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-");
 
   const itemCatById = useMemo(() => new Map<number, any>(itemCats.map((c: any) => [c.id, c])), [itemCats]);
@@ -178,8 +186,9 @@ export default function NsiRulesPage() {
     if (!token) return;
     setErr(null);
     try {
-      const [uRaw, itRaw, icRaw, grRaw, cpRaw, rlRaw] = await Promise.all([
+      const [uRaw, ucRaw, itRaw, icRaw, grRaw, cpRaw, rlRaw] = await Promise.all([
         requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
+        requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
         requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
         requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
         requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/global-uom-rules/`, token }).catch(() => []),
@@ -188,6 +197,7 @@ export default function NsiRulesPage() {
       ]);
 
       setUoms(parseRows(uRaw));
+      setUomCats(parseRows(ucRaw));
       setItems(parseRows(itRaw));
       setItemCats(parseRows(icRaw));
       setGlobalRules(parseRows(grRaw));
@@ -283,15 +293,65 @@ export default function NsiRulesPage() {
     });
   }, [catPkgs, qCategory, itemCatById, uomById]);
 
+  function getUomCategoryCodeByUomId(uomId: number | null | undefined): string {
+    if (!uomId) return "";
+    const uom = uomById.get(uomId);
+    const rawCode =
+      uom?.category_code ??
+      uom?.category?.code ??
+      uomCatsById.get(uom?.category)?.code ??
+      uom?.category ??
+      "";
+    return up(rawCode);
+  }
+
+  function itemCategoryPairMeta(r: any): { key: string; label: string } {
+    const fromCode = getUomCategoryCodeByUomId(r.from_uom) || "?";
+    const toCode = getUomCategoryCodeByUomId(r.to_uom) || "?";
+    const label = `${uomCategoryLabel(fromCode)} -> ${uomCategoryLabel(toCode)}`;
+    return { key: `${fromCode}->${toCode}`, label };
+  }
+
   const filteredItem = useMemo(() => {
     const qq = qItem.trim().toLowerCase();
     if (!qq) return itemRules;
     return itemRules.filter((r: any) => {
       const itemName = String(itemById.get(r.item)?.name ?? r.item ?? "");
-      const s = `${r.id ?? ""} ${itemName} ${ruleTypeLabel(r.rule_type)} ${formatRuleConditions(r)} ${formatRuleParams(r)} ${r.status ?? ""}`.toLowerCase();
+      const pairMeta = itemCategoryPairMeta(r);
+      const s = `${r.id ?? ""} ${itemName} ${ruleTypeLabel(r.rule_type)} ${pairMeta.label} ${formatRuleConditions(r)} ${formatRuleParams(r)} ${r.status ?? ""}`.toLowerCase();
       return s.includes(qq);
     });
-  }, [itemRules, qItem, itemById]);
+  }, [itemRules, qItem, itemById, uomById, uomCatsById]);
+
+  const groupedItemRules = useMemo(() => {
+    const byItem = new Map<string, { key: string; itemName: string; categoryMap: Map<string, { key: string; label: string; rules: Rule[] }> }>();
+
+    for (const r of filteredItem) {
+      const itemKey = String(r.item ?? "—");
+      const itemName = String(itemById.get(r.item)?.name ?? r.item ?? "—");
+      const pairMeta = itemCategoryPairMeta(r);
+      let itemGroup = byItem.get(itemKey);
+      if (!itemGroup) {
+        itemGroup = { key: itemKey, itemName, categoryMap: new Map() };
+        byItem.set(itemKey, itemGroup);
+      }
+      let pairGroup = itemGroup.categoryMap.get(pairMeta.key);
+      if (!pairGroup) {
+        pairGroup = { key: pairMeta.key, label: pairMeta.label, rules: [] };
+        itemGroup.categoryMap.set(pairMeta.key, pairGroup);
+      }
+      pairGroup.rules.push(r);
+    }
+
+    return Array.from(byItem.values())
+      .map((itemGroup) => ({
+        key: itemGroup.key,
+        itemName: itemGroup.itemName,
+        totalRules: Array.from(itemGroup.categoryMap.values()).reduce((acc, g) => acc + g.rules.length, 0),
+        categories: Array.from(itemGroup.categoryMap.values()).sort((a, b) => a.label.localeCompare(b.label, "ru")),
+      }))
+      .sort((a, b) => a.itemName.localeCompare(b.itemName, "ru"));
+  }, [filteredItem, itemById, uomById, uomCatsById]);
 
   const visibleGlobalColumns = useMemo(
     () => GLOBAL_COLUMNS.filter((c) => globalColumns[c.key]),
@@ -353,6 +413,10 @@ export default function NsiRulesPage() {
     if (activeTab === "global") setGlobalColumns({ ...DEFAULT_GLOBAL_COLUMNS });
     if (activeTab === "category") setCategoryColumns({ ...DEFAULT_CATEGORY_COLUMNS });
     if (activeTab === "item") setItemColumns({ ...DEFAULT_ITEM_COLUMNS });
+  }
+
+  function toggleItemGroup(groupKey: string) {
+    setExpandedItemGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
   }
 
   function renderGlobalCell(r: any, key: GlobalColumnKey): React.ReactNode {
@@ -666,32 +730,66 @@ export default function NsiRulesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredItem.map((r: any) => (
-                  <tr key={r.id}>
-                    {visibleItemColumns.map((c) => <td key={c.key}>{renderItemCell(r, c.key)}</td>)}
-                    <td className="nsi-actions-col">
-                      <div className="row nsi-table-actions">
-                        <button
-                          className="btn btn-tight nsi-action-icon"
-                          onClick={() => nav(`/nsi/rules/item/${r.id}/edit`)}
-                          title="Редактировать"
-                          aria-label="Редактировать"
-                        >
-                          ✎
-                        </button>
-                        <button
-                          className="btn btn-tight danger nsi-action-icon"
-                          onClick={() => removeItemRule(r.id)}
-                          title="Удалить"
-                          aria-label="Удалить"
-                        >
-                          🗑
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-                {filteredItem.length === 0 && (
+                {groupedItemRules.map((group) => {
+                  const expanded = !!expandedItemGroups[group.key];
+                  return (
+                    <React.Fragment key={group.key}>
+                      <tr className={`nsi-rules-group-row ${expanded ? "expanded" : ""}`}>
+                        <td colSpan={visibleItemColumns.length + 1}>
+                          <button
+                            type="button"
+                            className="nsi-rules-group-toggle"
+                            onClick={() => toggleItemGroup(group.key)}
+                            aria-expanded={expanded}
+                            aria-label={expanded ? "Свернуть группу" : "Развернуть группу"}
+                          >
+                            {expanded ? "▾" : "▸"}
+                          </button>
+                          <strong>{group.itemName}</strong>
+                          <small className="nsi-rules-group-meta">
+                            правил: {group.totalRules}, категорий: {group.categories.length}
+                          </small>
+                        </td>
+                      </tr>
+                      {expanded && group.categories.map((catGroup) => (
+                        <React.Fragment key={`${group.key}_${catGroup.key}`}>
+                          <tr className="nsi-rules-subgroup-row">
+                            <td colSpan={visibleItemColumns.length + 1}>
+                              <span className="badge">{catGroup.label}</span>
+                              <small className="nsi-rules-subgroup-meta">правил: {catGroup.rules.length}</small>
+                            </td>
+                          </tr>
+                          {catGroup.rules.map((r: any) => (
+                            <tr key={r.id}>
+                              {visibleItemColumns.map((c) => <td key={c.key}>{renderItemCell(r, c.key)}</td>)}
+                              <td className="nsi-actions-col">
+                                <div className="row nsi-table-actions">
+                                  <button
+                                    className="btn btn-tight nsi-action-icon"
+                                    onClick={() => nav(`/nsi/rules/item/${r.id}/edit`)}
+                                    title="Редактировать"
+                                    aria-label="Редактировать"
+                                  >
+                                    ✎
+                                  </button>
+                                  <button
+                                    className="btn btn-tight danger nsi-action-icon"
+                                    onClick={() => removeItemRule(r.id)}
+                                    title="Удалить"
+                                    aria-label="Удалить"
+                                  >
+                                    🗑
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+                {groupedItemRules.length === 0 && (
                   <tr>
                     <td colSpan={visibleItemColumns.length + 1} className="empty-row"><small>Ничего не найдено.</small></td>
                   </tr>
