@@ -53,11 +53,11 @@ export default function SiteTopbar(props: {
       <div className="app-topbar-inner">
         <div className="topbar-left">
           {isPublic ? (
-            <a href="/" className="brand-link" aria-label="Главная">
+            <a href="/calculator" className="brand-link" aria-label="Главная">
               <BrandLogo />
             </a>
           ) : (
-            <Link to="/app" className="brand-link" aria-label="Главная">
+            <Link to="/calculator" className="brand-link" aria-label="Главная">
               <BrandLogo />
             </Link>
           )}

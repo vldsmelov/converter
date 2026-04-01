@@ -83,7 +83,7 @@ export default function App() {
       <div className="container app-shell">
         <div className="app-main">
           <Routes>
-            <Route path="/" element={<Navigate to="/app" replace />} />
+            <Route path="/" element={<Navigate to="/calculator" replace />} />
             <Route path="/app" element={<InvoicesPage />} />
             <Route path="/create" element={<CreateInvoicePage />} />
             <Route path="/calculator" element={<QuickCalculatorPage token={token} />} />
@@ -115,6 +115,7 @@ export default function App() {
 
             <Route path="/feedback/inbox" element={<FeedbackInboxPage />} />
             <Route path="/admin/console" element={<AdminConsolePage />} />
+            <Route path="*" element={<Navigate to="/calculator" replace />} />
           </Routes>
         </div>
 

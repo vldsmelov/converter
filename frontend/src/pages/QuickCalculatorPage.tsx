@@ -101,7 +101,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   const [toUom, setToUom] = useState("");
   const [qty, setQty] = useState("1");
 
-  const [roundMode, setRoundMode] = useState<"item" | "custom">("item");
+  const [useDefaultPrecision, setUseDefaultPrecision] = useState(true);
   const [roundPrecision, setRoundPrecision] = useState(2);
 
   const [resultQtyRaw, setResultQtyRaw] = useState("");
@@ -172,9 +172,9 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
 
   const roundedQty = useMemo(() => {
     if (!resultQtyRaw) return "";
-    if (roundMode === "item") return resultQtyRaw;
+    if (useDefaultPrecision) return resultQtyRaw;
     return roundHalfUp(resultQtyRaw, roundPrecision);
-  }, [resultQtyRaw, roundMode, roundPrecision]);
+  }, [resultQtyRaw, useDefaultPrecision, roundPrecision]);
 
   const fromCatCode = useMemo(() => {
     const u = uoms.find((x: any) => up(x.code) === up(fromUom));
@@ -464,7 +464,6 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       <PageHeader
         title="Калькулятор конвертации"
         subtitle="Быстрый расчёт без создания накладной: выберите номенклатуру, ЕИ и количество."
-        right={!props.publicMode ? (<button className="btn" onClick={() => nav("/app")}>К накладным</button>) : undefined}
       />
 
       {err && (
@@ -486,12 +485,12 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       )}
 
       <div className="card calculator-controls-card" style={{ marginTop: 12 }}>
-        <div className="row">
-          <label className="field" style={{ flex: 1, minWidth: 360 }}>
+        <div className="row calculator-top-row">
+          <label className="field calculator-item-field">
             <small>Номенклатура</small>
             <ItemLookup token={token} value={itemId} onChange={(item) => setItemId(item?.id ?? null)} />
           </label>
-          <label className="field" style={{ minWidth: 240 }}>
+          <label className="field calculator-variant-field">
             <small>Вариант перевода</small>
             <select value={supplierCode} onChange={(e) => setSupplierCode(e.target.value)}>
               <option value="">По умолчанию</option>
@@ -500,32 +499,35 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               ))}
             </select>
           </label>
-          <label className="field" style={{ minWidth: 240, flex: 1 }}>
-            <small>Округление</small>
-            <select value={roundMode} onChange={(e) => setRoundMode(e.target.value as "item" | "custom")}>
-              <option value="item">По точности номенклатуры</option>
-              <option value="custom">Пользовательская точность</option>
-            </select>
+          <label className="field calculator-round-default-field">
+            <small>&nbsp;</small>
+            <span className="calculator-checkline">
+              <input
+                type="checkbox"
+                checked={useDefaultPrecision}
+                onChange={(e) => setUseDefaultPrecision(e.target.checked)}
+              />
+              <span>Точность по умолчанию</span>
+            </span>
           </label>
-          <label className="field" style={{ width: 190, minWidth: 190 }}>
+          <label className="field calculator-precision-field">
             <small>Знаков после запятой</small>
             <input
               type="number"
               min={0}
               max={8}
               value={roundPrecision}
-              disabled={roundMode !== "custom"}
+              disabled={useDefaultPrecision}
               onChange={(e) => setRoundPrecision(Math.max(0, Math.min(8, toNum(e.target.value))))}
-              style={{ width: 120 }}
             />
           </label>
         </div>
-        <div className="row calculator-controls-row">
-          <label className="field">
+        <div className="row calculator-controls-row calculator-ei-row">
+          <label className="field calculator-qty-field">
             <small>Количество</small>
-            <input value={qty} onChange={(e) => setQty(e.target.value)} style={{ width: 140 }} />
+            <input value={qty} onChange={(e) => setQty(e.target.value)} />
           </label>
-          <label className="field">
+          <label className="field calculator-uom-field">
             <small>Входящая ЕИ</small>
             <select value={fromUom} onChange={(e) => setFromUom(up(e.target.value))}>
               {uoms.map((u: any) => (
@@ -535,7 +537,13 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               ))}
             </select>
           </label>
-          <label className="field">
+          <div className="field calculator-swap-field">
+            <small>&nbsp;</small>
+            <button className="btn calculator-inline-btn calculator-swap-btn" onClick={swapUoms} title="Поменять ЕИ" aria-label="Поменять ЕИ">
+              ↔
+            </button>
+          </div>
+          <label className="field calculator-uom-field">
             <small>Итоговая ЕИ</small>
             <select value={toUom} onChange={(e) => setToUom(up(e.target.value))}>
               {uoms.map((u: any) => (
@@ -545,11 +553,13 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               ))}
             </select>
           </label>
+          <div className="field calculator-default-uom-field">
+            <small>&nbsp;</small>
+            <button className="btn calculator-inline-btn" onClick={applyDefaultTarget}>ЕИ по умолчанию</button>
+          </div>
         </div>
         <div className="row calculator-actions-row">
-          <button className="btn" onClick={swapUoms}>Поменять ЕИ</button>
-          <button className="btn" onClick={applyDefaultTarget}>ЕИ по умолчанию</button>
-          <button className="btn primary" onClick={calculate} disabled={calculating}>
+          <button className="btn primary calculator-calc-btn" onClick={calculate} disabled={calculating}>
             {calculating ? "Считаем..." : "Рассчитать"}
           </button>
         </div>
@@ -573,7 +583,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               <span className="badge calculator-result-badge">
                 {normalizeQty(qty)} {up(fromUom)} {"->"} {roundedQty} {resultUom}
               </span>
-              {roundMode === "custom" && (
+              {!useDefaultPrecision && (
                 <small>Округлено до {roundPrecision} зн.</small>
               )}
             </div>
