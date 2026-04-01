@@ -4,6 +4,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { ApiError, requestJson } from "../api/request";
 import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
+import { ruleParamLabel, ruleTypeLabel, uomCategoryLabel } from "../lib/ruLabels";
 
 type Item = any;
 type Uom = any;
@@ -389,7 +390,7 @@ export default function CreateInvoicePage() {
         ...m,
         [line.key]: {
           state: "ok",
-          message: `OK: ЕИ совпадает с хранением (${up(posting)})`,
+          message: `Успешно: ЕИ совпадает с хранением (${up(posting)})`,
         },
       }));
       return;
@@ -398,6 +399,11 @@ export default function CreateInvoicePage() {
     setChecks((m) => ({ ...m, [line.key]: { state: "checking" } }));
 
     try {
+      const requestContext: Record<string, unknown> = {};
+      const barcode = line.barcode || undefined;
+      const supplierCode = line.supplier_code || undefined;
+      if (barcode) requestContext.barcode = barcode;
+      if (supplierCode) requestContext.supplier_code = supplierCode;
       const res = await requestJson<any>({
         method: "POST",
         url: `/conversion/api/v1/convert`,
@@ -406,9 +412,9 @@ export default function CreateInvoicePage() {
           item_id: line.item_id,
           qty: "1",
           from_uom: line.uom_code,
-          context: {},
-          barcode: line.barcode || undefined,
-          supplier_code: line.supplier_code || undefined,
+          context: requestContext,
+          barcode,
+          supplier_code: supplierCode,
         },
       });
 
@@ -421,7 +427,7 @@ export default function CreateInvoicePage() {
         [line.key]: {
           state: ok ? "ok" : "mismatch",
           message: ok
-            ? `OK: 1 ${up(line.uom_code)} -> ${resultQty} ${resultUom}`
+            ? `Успешно: 1 ${up(line.uom_code)} -> ${resultQty} ${resultUom}`
             : `Есть конвертация, но итоговая ЕИ (${resultUom}) не совпадает с оприходованием (${up(posting)}).`,
           suggestedUrl: ok
             ? undefined
@@ -458,9 +464,9 @@ export default function CreateInvoicePage() {
           const stepsText = steps
             .map((s: SuggestedRuleStep) => {
               const num = s.step ?? "?";
-              const pair = `${s.from_category ?? "?"} -> ${s.to_category ?? "?"}`;
-              const rule = s.rule_type ?? "rule";
-              const param = s.required_param ? `, ${s.required_param}=${s.example_param_value ?? "..."}` : "";
+              const pair = `${uomCategoryLabel(s.from_category)} -> ${uomCategoryLabel(s.to_category)}`;
+              const rule = ruleTypeLabel(s.rule_type);
+              const param = s.required_param ? `, ${ruleParamLabel(s.required_param)}=${s.example_param_value ?? "..."}` : "";
               return `${num}) ${pair}, ${rule}${param}`;
             })
             .join("; ");
@@ -651,7 +657,7 @@ export default function CreateInvoicePage() {
                         <small>Проверяю...</small>
                       ) : ch.state === "ok" ? (
                         <div>
-                          <span className="badge status-ok">OK</span>
+                          <span className="badge status-ok">Успешно</span>
                           {ch.message ? <div><small>{ch.message}</small></div> : null}
                         </div>
                       ) : ch.state === "mismatch" ? (

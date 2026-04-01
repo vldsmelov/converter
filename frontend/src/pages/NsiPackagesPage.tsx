@@ -23,6 +23,14 @@ export default function NsiPackagesPage() {
     return (id: number) => m.get(id) ?? String(id);
   }, [uoms]);
 
+  const statusLabel = (v: unknown) => {
+    const s = String(v ?? "").toLowerCase();
+    if (s === "active") return "Активный";
+    if (s === "draft") return "Черновик";
+    if (s === "archived") return "Архив";
+    return s || "-";
+  };
+
   async function load() {
     if (!token) return;
     setErr(null);
@@ -82,7 +90,7 @@ export default function NsiPackagesPage() {
               <td>{itemName(p.item)}</td>
               <td>{String(p.supplier_code ?? "").trim() || "—"}</td>
               <td><span className="badge">1 {uomCode(p.package_uom)}</span> = <b>{p.content_qty}</b> {uomCode(p.content_uom)}</td>
-              <td>{p.status}</td>
+              <td>{statusLabel(p.status)}</td>
               <td style={{ textAlign: "right" }}>
                 <div className="row" style={{ justifyContent: "flex-end" }}>
                   <button className="btn" onClick={() => nav(`/nsi/packages/${p.id}/edit`)}>Редактировать</button>

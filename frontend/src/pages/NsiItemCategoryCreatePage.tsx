@@ -142,9 +142,9 @@ export default function NsiItemCategoryCreatePage() {
                 <label>
                   <small>Тип</small><br />
                   <select value={defaultFieldType} onChange={(e) => setDefaultFieldType(e.target.value as "string" | "number" | "boolean")}>
-                    <option value="string">string</option>
-                    <option value="number">number</option>
-                    <option value="boolean">boolean</option>
+                    <option value="string">Строка</option>
+                    <option value="number">Число</option>
+                    <option value="boolean">Логическое</option>
                   </select>
                 </label>
                 <label>

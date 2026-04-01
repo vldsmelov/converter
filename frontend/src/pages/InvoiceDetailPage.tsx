@@ -31,6 +31,17 @@ function fmtSize(v: unknown) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function invoiceStatusLabel(v: unknown) {
+  const s = String(v ?? "").toLowerCase();
+  if (s === "new") return "Новая";
+  if (s === "calculating") return "Рассчитывается";
+  if (s === "calculated") return "Рассчитана";
+  if (s === "generating") return "Формируется";
+  if (s === "generated") return "Сформирована";
+  if (s === "failed") return "Ошибка";
+  return s || "-";
+}
+
 export default function InvoiceDetailPage() {
   const { id } = useParams();
   const invId = Number(id);
@@ -152,7 +163,7 @@ export default function InvoiceDetailPage() {
     <div className="card">
       <PageHeader
         title={`Накладная: ${inv?.number ?? `#${invId}`}`}
-        subtitle={`Статус: ${status || "-"} • Создана: ${fmtDateTime(inv?.created_at)}`}
+        subtitle={`Статус: ${invoiceStatusLabel(status)} • Создана: ${fmtDateTime(inv?.created_at)}`}
         right={
           <>
             <button className="btn" onClick={() => nav("/app")}>К списку</button>
@@ -212,7 +223,7 @@ export default function InvoiceDetailPage() {
             {busy === "generate" ? "Генерирую..." : "Сгенерировать XLSX/PDF"}
           </button>
           <div style={{ flex: 1 }} />
-          <small>Статусы: new → calculating → calculated → generating → generated</small>
+          <small>Статусы: Новая → Рассчитывается → Рассчитана → Формируется → Сформирована</small>
         </div>
       </div>
 
@@ -243,6 +254,7 @@ export default function InvoiceDetailPage() {
                 const note = conv
                   ? `Шагов: ${Array.isArray(conv.steps) ? conv.steps.length : 0}`
                   : (status === "failed" ? "Проверьте правила конвертации" : "");
+                const rowStatusLabel = rowStatus === "ok" ? "Успешно" : rowStatus === "failed" ? "Ошибка" : "-";
 
                 return (
                   <tr key={l.line_no}>
@@ -252,7 +264,7 @@ export default function InvoiceDetailPage() {
                     <td>{l.uom_code}</td>
                     <td className="num">{conv ? fmtQty(conv.posting_qty, 6) : "-"}</td>
                     <td>{conv?.posting_uom_code ?? "-"}</td>
-                    <td><span className={`badge ${rowStatusClass}`.trim()}>{rowStatus}</span></td>
+                    <td><span className={`badge ${rowStatusClass}`.trim()}>{rowStatusLabel}</span></td>
                     <td className="note-cell"><small>{note}</small></td>
                   </tr>
                 );

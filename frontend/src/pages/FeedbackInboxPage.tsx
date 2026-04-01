@@ -22,6 +22,21 @@ function fmtDateTime(v: string | null | undefined) {
   return new Date(v).toLocaleString();
 }
 
+function feedbackKindLabel(v: FeedbackRow["kind"]) {
+  if (v === "bug") return "Ошибка";
+  if (v === "suggestion") return "Предложение";
+  if (v === "question") return "Вопрос";
+  if (v === "other") return "Другое";
+  return v;
+}
+
+function feedbackStatusLabel(v: FeedbackRow["status"]) {
+  if (v === "new") return "Новый";
+  if (v === "in_progress") return "В работе";
+  if (v === "done") return "Закрыт";
+  return v;
+}
+
 export default function FeedbackInboxPage() {
   const { token, keycloak } = useAuth();
   const realmRoles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
@@ -128,7 +143,7 @@ export default function FeedbackInboxPage() {
               <tr key={r.id}>
                 <td className="num">{r.id}</td>
                 <td><small>{fmtDateTime(r.created_at)}</small></td>
-                <td><span className="badge">{r.kind}</span></td>
+                <td><span className="badge">{feedbackKindLabel(r.kind)}</span></td>
                 <td>{r.title}</td>
                 <td style={{ minWidth: 240, whiteSpace: "pre-wrap" }}>{r.message}</td>
                 <td><small>{r.page_path || "-"}</small></td>
@@ -142,9 +157,9 @@ export default function FeedbackInboxPage() {
                     onChange={(e) => setStatusDraft((prev) => ({ ...prev, [r.id]: e.target.value as FeedbackRow["status"] }))}
                     disabled={!canWrite}
                   >
-                    <option value="new">new</option>
-                    <option value="in_progress">in_progress</option>
-                    <option value="done">done</option>
+                    <option value="new">{feedbackStatusLabel("new")}</option>
+                    <option value="in_progress">{feedbackStatusLabel("in_progress")}</option>
+                    <option value="done">{feedbackStatusLabel("done")}</option>
                   </select>
                 </td>
                 <td style={{ minWidth: 220 }}>

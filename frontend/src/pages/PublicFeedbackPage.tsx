@@ -135,7 +135,7 @@ export default function PublicFeedbackPage() {
             </label>
 
             <label className="field">
-              <small>Email (опционально)</small>
+              <small>Эл. почта (опционально)</small>
               <input value={senderEmail} onChange={(e) => setSenderEmail(e.target.value)} placeholder="name@example.com" />
             </label>
           </div>

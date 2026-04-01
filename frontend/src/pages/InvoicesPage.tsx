@@ -16,6 +16,17 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function invoiceStatusLabel(v: unknown) {
+  const s = String(v ?? "").toLowerCase();
+  if (s === "new") return "Новая";
+  if (s === "calculating") return "Рассчитывается";
+  if (s === "calculated") return "Рассчитана";
+  if (s === "generating") return "Формируется";
+  if (s === "generated") return "Сформирована";
+  if (s === "failed") return "Ошибка";
+  return s || "-";
+}
+
 export default function InvoicesPage() {
   const { token } = useAuth();
   const nav = useNavigate();
@@ -132,7 +143,7 @@ export default function InvoicesPage() {
             <small>Статус</small>
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
               <option value="all">Все</option>
-              {statuses.map((s) => <option key={s} value={s}>{s}</option>)}
+              {statuses.map((s) => <option key={s} value={s}>{invoiceStatusLabel(s)}</option>)}
             </select>
           </label>
 
@@ -182,7 +193,7 @@ export default function InvoicesPage() {
                   <td>{r.supplier}</td>
                   <td className="mono">{fmtDate(r.doc_date)}</td>
                   <td className="num mono">{lineCount}</td>
-                  <td><span className="badge">{r.status}</span></td>
+                  <td><span className="badge">{invoiceStatusLabel(r.status)}</span></td>
                   <td className="action-col" style={{ textAlign: "right" }}>
                     <button className="btn btn-tight" onClick={() => nav(`/invoices/${r.id}`)}>Открыть</button>
                   </td>

@@ -113,11 +113,11 @@ export default function NsiUomEditPage() {
             </select>
           </label>
           <label>
-            <small>factor_to_base</small><br />
+            <small>Коэффициент к базовой</small><br />
             <input value={factor} onChange={(e) => setFactor(e.target.value)} />
           </label>
           <label>
-            <small>precision</small><br />
+            <small>Точность</small><br />
             <input type="number" value={precision} onChange={(e) => setPrecision(toNum(e.target.value))} />
           </label>
         </div>

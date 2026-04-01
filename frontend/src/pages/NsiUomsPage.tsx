@@ -68,7 +68,7 @@ export default function NsiUomsPage() {
       <table style={{ marginTop: 12 }}>
         <thead>
           <tr>
-            <th>ID</th><th>Код</th><th>Название</th><th>Категория</th><th>factor_to_base</th><th>precision</th><th></th>
+            <th>ID</th><th>Код</th><th>Название</th><th>Категория</th><th>Коэффициент к базовой</th><th>Точность</th><th></th>
           </tr>
         </thead>
         <tbody>

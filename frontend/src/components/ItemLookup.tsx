@@ -246,7 +246,7 @@ export default function ItemLookup(props: {
                     <small>
                       #{row.id}
                       {row.sku ? ` • ${row.sku}` : ""}
-                      {row.is_active === false ? " • archived" : ""}
+                      {row.is_active === false ? " • в архиве" : ""}
                     </small>
                   </button>
                 ))}
@@ -265,4 +265,3 @@ export default function ItemLookup(props: {
     </div>
   );
 }
-

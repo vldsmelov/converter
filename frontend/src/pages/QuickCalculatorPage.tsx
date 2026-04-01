@@ -4,6 +4,7 @@ import { ApiError, requestJson } from "../api/request";
 import SiteTopbar from "../components/SiteTopbar";
 import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
+import { ruleParamLabel, ruleTypeLabel, uomCategoryLabel, uomLabel } from "../lib/ruLabels";
 import { toNum } from "./nsi_utils";
 
 type ConvertStep = {
@@ -68,6 +69,14 @@ function parseConvertError(error: unknown): ParsedConvertError | null {
   } catch {
     return null;
   }
+}
+
+function stepKindLabel(v: unknown): string {
+  const k = String(v ?? "").trim().toLowerCase();
+  if (k === "rule") return "Правило";
+  if (k === "identity") return "Без пересчета";
+  if (k === "bridge") return "Промежуточный шаг";
+  return String(v ?? "-");
 }
 
 export default function QuickCalculatorPage(props: { token?: string; publicMode?: boolean }) {
@@ -178,6 +187,8 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     if (!u) return "-";
     return up(uomCatsById.get(u.category)?.code ?? "-");
   }, [uoms, uomCatsById, toUom]);
+  const fromCatLabel = useMemo(() => uomCategoryLabel(fromCatCode), [fromCatCode]);
+  const toCatLabel = useMemo(() => uomCategoryLabel(toCatCode), [toCatCode]);
 
   function uomCategoryCodeByUomCode(code: string | null | undefined): string | null {
     if (!code) return null;
@@ -371,6 +382,9 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     resetOutput();
 
     try {
+      const requestContext: Record<string, unknown> = {};
+      const supplier = supplierCode.trim();
+      if (supplier) requestContext.supplier_code = supplier;
       const res = await requestJson<any>({
         method: "POST",
         url: `/conversion/api/v1/convert`,
@@ -380,8 +394,8 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           qty: qtyText,
           from_uom: up(fromUom),
           to_uom: up(toUom),
-          context: {},
-          supplier_code: supplierCode.trim() || undefined,
+          context: requestContext,
+          supplier_code: supplier || undefined,
         },
       });
 
@@ -417,9 +431,9 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           const stepsText = parsed.suggestedSteps
             .map((s) => {
               const num = s.step ?? "?";
-              const pair = `${s.from_category ?? "?"} -> ${s.to_category ?? "?"}`;
-              const rule = s.rule_type ?? "rule";
-              const param = s.required_param ? `, ${s.required_param}=${s.example_param_value ?? "..."}` : "";
+              const pair = `${uomCategoryLabel(s.from_category)} -> ${uomCategoryLabel(s.to_category)}`;
+              const rule = ruleTypeLabel(s.rule_type);
+              const param = s.required_param ? `, ${ruleParamLabel(s.required_param)}=${s.example_param_value ?? "..."}` : "";
               return `${num}) ${pair}, ${rule}${param}`;
             })
             .join("; ");
@@ -514,13 +528,21 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           <label className="field">
             <small>Входящая ЕИ</small>
             <select value={fromUom} onChange={(e) => setFromUom(up(e.target.value))}>
-              {uoms.map((u: any) => <option key={u.id} value={up(u.code)}>{up(u.code)} ({up(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
+              {uoms.map((u: any) => (
+                <option key={u.id} value={up(u.code)}>
+                  {uomLabel(u.code)} ({uomCategoryLabel(uomCatsById.get(u.category)?.code ?? "-")})
+                </option>
+              ))}
             </select>
           </label>
           <label className="field">
             <small>Итоговая ЕИ</small>
             <select value={toUom} onChange={(e) => setToUom(up(e.target.value))}>
-              {uoms.map((u: any) => <option key={u.id} value={up(u.code)}>{up(u.code)} ({up(uomCatsById.get(u.category)?.code ?? "-")})</option>)}
+              {uoms.map((u: any) => (
+                <option key={u.id} value={up(u.code)}>
+                  {uomLabel(u.code)} ({uomCategoryLabel(uomCatsById.get(u.category)?.code ?? "-")})
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -532,7 +554,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           </button>
         </div>
         <div className="calculator-categories">
-          <small>Категории: {fromCatCode} {"->"} {toCatCode}</small>
+          <small>Категории: {fromCatLabel} {"->"} {toCatLabel}</small>
           <br />
           <small>
             {supplierCode.trim()
@@ -584,7 +606,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
                 <tbody>
                   {steps.map((s, i) => (
                     <tr key={i}>
-                      <td>{s.kind ?? "-"}</td>
+                      <td>{stepKindLabel(s.kind)}</td>
                       <td>{s.description ?? "-"}</td>
                       <td>{String(s.from_qty ?? "-")} {up(s.from_uom ?? "")}</td>
                       <td>{String(s.to_qty ?? "-")} {up(s.to_uom ?? "")}</td>

@@ -151,9 +151,9 @@ export default function NsiPackageEditPage() {
           <label>
             <small>Статус</small><br />
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="active">active</option>
-              <option value="draft">draft</option>
-              <option value="archived">archived</option>
+              <option value="active">Активный</option>
+              <option value="draft">Черновик</option>
+              <option value="archived">Архив</option>
             </select>
           </label>
           <label>

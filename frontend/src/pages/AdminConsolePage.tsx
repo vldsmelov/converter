@@ -33,6 +33,17 @@ function sortedUnique(v: string[]) {
   return Array.from(new Set((v ?? []).filter(Boolean))).sort();
 }
 
+function boolRu(v: boolean) {
+  return v ? "Да" : "Нет";
+}
+
+function fieldTypeRu(v: string) {
+  if (v === "string") return "Строка";
+  if (v === "number") return "Число";
+  if (v === "boolean") return "Логическое";
+  return v;
+}
+
 export default function AdminConsolePage() {
   const { token, keycloak } = useAuth();
   const roles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
@@ -187,7 +198,7 @@ export default function AdminConsolePage() {
   async function createField() {
     if (!token) return;
     if (!fieldCode.trim() || !fieldLabel.trim()) {
-      setErr("Для системного поля нужны code и название.");
+      setErr("Для системного поля нужны код и название.");
       return;
     }
     setErr(null);
@@ -270,11 +281,11 @@ export default function AdminConsolePage() {
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
 
       <div className="card" style={{ marginTop: 10 }}>
-        <h4 style={{ marginTop: 0 }}>Роли доступа (bundles)</h4>
+        <h4 style={{ marginTop: 0 }}>Роли доступа (наборы)</h4>
         <div className="modal-grid">
           <label>
             <small>Имя набора роли</small><br />
-            <input value={bundleName} onChange={(e) => setBundleName(e.target.value)} placeholder="economist" />
+            <input value={bundleName} onChange={(e) => setBundleName(e.target.value)} placeholder="экономист" />
           </label>
           <label>
             <small>Описание</small><br />
@@ -328,7 +339,7 @@ export default function AdminConsolePage() {
             <input value={newPassword} type="password" onChange={(e) => setNewPassword(e.target.value)} />
           </label>
           <label>
-            <small>Email</small><br />
+            <small>Эл. почта</small><br />
             <input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
           </label>
           <label>
@@ -366,7 +377,7 @@ export default function AdminConsolePage() {
             {users.map((u) => (
               <tr key={u.id}>
                 <td>{u.username}</td>
-                <td>{u.enabled ? "yes" : "no"}</td>
+                <td>{boolRu(u.enabled)}</td>
                 <td><small>{(u.roles ?? []).join(", ") || "-"}</small></td>
               </tr>
             ))}
@@ -406,7 +417,7 @@ export default function AdminConsolePage() {
         <h4 style={{ marginTop: 0 }}>Системные поля по умолчанию</h4>
         <div className="modal-grid">
           <label>
-            <small>Code (уникальный)</small><br />
+            <small>Код (уникальный)</small><br />
             <input value={fieldCode} onChange={(e) => setFieldCode(e.target.value)} placeholder="project_code" />
           </label>
           <label>
@@ -416,9 +427,9 @@ export default function AdminConsolePage() {
           <label>
             <small>Тип</small><br />
             <select value={fieldType} onChange={(e) => setFieldType(e.target.value as any)}>
-              <option value="string">string</option>
-              <option value="number">number</option>
-              <option value="boolean">boolean</option>
+              <option value="string">Строка</option>
+              <option value="number">Число</option>
+              <option value="boolean">Логическое</option>
             </select>
           </label>
           <label>
@@ -436,11 +447,11 @@ export default function AdminConsolePage() {
         <table className="compact-table" style={{ marginTop: 10 }}>
           <thead>
             <tr>
-              <th>Code</th>
+              <th>Код</th>
               <th>Название</th>
               <th>Тип</th>
-              <th>Default</th>
-              <th>Required</th>
+              <th>По умолчанию</th>
+              <th>Обязательное</th>
               <th>Системное</th>
             </tr>
           </thead>
@@ -449,10 +460,10 @@ export default function AdminConsolePage() {
               <tr key={f.id}>
                 <td><code>{f.code}</code></td>
                 <td>{f.label}</td>
-                <td>{f.field_type}</td>
+                <td>{fieldTypeRu(f.field_type)}</td>
                 <td>{f.default_value || "-"}</td>
-                <td>{f.required ? "yes" : "no"}</td>
-                <td>{f.is_system ? "yes" : "no"}</td>
+                <td>{boolRu(f.required)}</td>
+                <td>{boolRu(f.is_system)}</td>
               </tr>
             ))}
             {fields.length === 0 && <tr><td colSpan={6}><small>Системных полей пока нет.</small></td></tr>}

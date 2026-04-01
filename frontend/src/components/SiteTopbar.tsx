@@ -122,10 +122,10 @@ export default function SiteTopbar(props: {
                       Админ панель
                     </button>
                     <a className="nav-dropdown-item" href={`${import.meta.env.VITE_DOCS_BASE_URL}/api/docs/`} target="_blank" rel="noreferrer">
-                      Docs API
+                      Документация API документов
                     </a>
                     <a className="nav-dropdown-item" href={`${import.meta.env.VITE_NSI_BASE_URL}/api/docs/`} target="_blank" rel="noreferrer">
-                      NSI API
+                      Документация API НСИ
                     </a>
                   </>
                 )}

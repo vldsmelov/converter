@@ -104,7 +104,7 @@ export default function NsiUomCreatePage() {
     <div className="card">
       <PageHeader
         title="Создание ЕИ"
-        subtitle="Код + категория + коэффициент к базовой (factor_to_base)."
+        subtitle="Код, категория и коэффициент пересчёта к базовой единице."
         right={
           <>
             <button className="btn" onClick={() => nav("/nsi/uoms")}>Отмена</button>
@@ -131,11 +131,11 @@ export default function NsiUomCreatePage() {
             </select>
           </label>
           <label>
-            <small>factor_to_base</small><br />
+            <small>Коэффициент к базовой единице</small><br />
             <input value={factor} onChange={(e) => setFactor(e.target.value)} />
           </label>
           <label>
-            <small>precision</small><br />
+            <small>Точность</small><br />
             <input type="number" value={precision} onChange={(e) => setPrecision(toNum(e.target.value))} />
           </label>
         </div>
@@ -164,9 +164,9 @@ export default function NsiUomCreatePage() {
                 <label>
                   <small>Тип</small><br />
                   <select value={defaultFieldType} onChange={(e) => setDefaultFieldType(e.target.value as "string" | "number" | "boolean")}>
-                    <option value="string">string</option>
-                    <option value="number">number</option>
-                    <option value="boolean">boolean</option>
+                    <option value="string">Строка</option>
+                    <option value="number">Число</option>
+                    <option value="boolean">Логическое</option>
                   </select>
                 </label>
                 <label>

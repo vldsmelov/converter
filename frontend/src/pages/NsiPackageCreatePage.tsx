@@ -152,8 +152,8 @@ export default function NsiPackageCreatePage() {
           <label>
             <small>Статус</small><br />
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="active">active</option>
-              <option value="draft">draft</option>
+              <option value="active">Активный</option>
+              <option value="draft">Черновик</option>
             </select>
           </label>
           <label>
@@ -190,9 +190,9 @@ export default function NsiPackageCreatePage() {
                 <label>
                   <small>Тип</small><br />
                   <select value={defaultFieldType} onChange={(e) => setDefaultFieldType(e.target.value as "string" | "number" | "boolean")}>
-                    <option value="string">string</option>
-                    <option value="number">number</option>
-                    <option value="boolean">boolean</option>
+                    <option value="string">Строка</option>
+                    <option value="number">Число</option>
+                    <option value="boolean">Логическое</option>
                   </select>
                 </label>
                 <label>
