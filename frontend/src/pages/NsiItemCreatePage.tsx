@@ -23,6 +23,7 @@ export default function NsiItemCreatePage() {
   const [isActive, setIsActive] = useState(true);
   const [allowFractional, setAllowFractional] = useState(true);
   const [roundingPrecision, setRoundingPrecision] = useState(3);
+  const [densityKgPerL, setDensityKgPerL] = useState("");
   const [makeDefaultField, setMakeDefaultField] = useState(false);
   const [defaultFieldCode, setDefaultFieldCode] = useState("");
   const [defaultFieldLabel, setDefaultFieldLabel] = useState("");
@@ -147,6 +148,12 @@ export default function NsiItemCreatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [useDefaultUom]);
 
+  useEffect(() => {
+    if (!allowFractional && roundingPrecision !== 0) {
+      setRoundingPrecision(0);
+    }
+  }, [allowFractional, roundingPrecision]);
+
   const sourceLabel = useMemo(() => {
     if (!categoryId) return "—";
     const defU = catDefaultUom(categoryId);
@@ -194,6 +201,16 @@ export default function NsiItemCreatePage() {
     if (!token) return;
     if (!categoryId) { setErr("Выберите категорию."); return; }
     if (!storageUom) { setErr("Выберите единицу хранения."); return; }
+    const densityText = String(densityKgPerL ?? "").replace(",", ".").trim();
+    let densityValue: number | null = null;
+    if (densityText) {
+      const parsed = Number(densityText);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setErr("Плотность должна быть числом больше 0.");
+        return;
+      }
+      densityValue = parsed;
+    }
     if (exactNameDuplicate) {
       setErr("Номенклатура с таким названием уже существует. Выберите существующую позицию или укажите другое имя.");
       return;
@@ -209,6 +226,7 @@ export default function NsiItemCreatePage() {
           sku: null,
           name,
           category: categoryId,
+          density_kg_per_l: densityValue,
           is_active: isActive,
           policy: {
             storage_uom: storageUom,
@@ -236,14 +254,13 @@ export default function NsiItemCreatePage() {
 
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <div className="row">
-          <label style={{ flex: 1 }}>
-            <small>Название товара</small><br />
+      <div className="card nsi-item-form" style={{ marginTop: 12 }}>
+        <div className="nsi-item-row-one">
+          <label className="field">
+            <small>Название номенклатуры</small>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              style={{ width: "100%" }}
               list="item-name-suggestions"
               autoComplete="off"
             />
@@ -252,55 +269,87 @@ export default function NsiItemCreatePage() {
             </datalist>
             {exactNameDuplicate && <small style={{ color: "#fca5a5" }}>Такое название уже есть в справочнике.</small>}
           </label>
-          <label>
-            <small>Категория</small><br />
+        </div>
+
+        <div className="nsi-item-row-two">
+          <label className="field">
+            <small>Категория</small>
             <select value={categoryId ?? ""} onChange={(e) => onCategoryChange(toNum(e.target.value))}>
               {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
-        </div>
 
-        <div className="row" style={{ marginTop: 10, alignItems: "flex-end" }}>
-          <label className="row" style={{ gap: 8 }}>
-            <input
-              type="checkbox"
-              checked={useDefaultUom && !!defUom}
-              disabled={!defUom}
-              onChange={(e) => setUseDefaultUom(e.target.checked)}
-            />
-            <small>Использовать ЕИ по умолчанию категории</small>
+          <label className="field nsi-item-toggle-field">
+            <small>&nbsp;</small>
+            <span className="nsi-item-toggle">
+              <input
+                type="checkbox"
+                checked={useDefaultUom && !!defUom}
+                disabled={!defUom}
+                onChange={(e) => setUseDefaultUom(e.target.checked)}
+              />
+              <span>Использовать ЕИ по умолчанию категории</span>
+            </span>
           </label>
 
-          <div style={{ flex: 1 }} />
-
-          <label>
-            <small>Единица хранения (в базе)</small><br />
+          <label className="field">
+            <small>Единица хранения (в базе)</small>
             <select
               value={storageUom ?? ""}
               onChange={(e) => setStorageUom(toNum(e.target.value))}
               disabled={useDefaultUom && !!defUom}
             >
-              {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
+              {uoms.map((u: any) => <option key={u.id} value={u.id}>{u.name} ({u.code})</option>)}
             </select>
           </label>
 
-          <label className="row" style={{ gap: 6 }}>
-            <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-            <small>активен</small>
+          <label className="field">
+            <small>Плотность, кг/л (опционально)</small>
+            <input
+              type="number"
+              min={0}
+              step="0.000001"
+              value={densityKgPerL}
+              onChange={(e) => setDensityKgPerL(e.target.value)}
+              placeholder="например, 1.45"
+            />
           </label>
         </div>
 
-        <div className="row" style={{ marginTop: 8 }}>
-          <label className="row" style={{ gap: 6 }}>
-            <input type="checkbox" checked={allowFractional} onChange={(e) => setAllowFractional(e.target.checked)} />
-            <small>дробные</small>
+        <div className="nsi-item-row-three">
+          <label className="field nsi-item-toggle-field">
+            <small>&nbsp;</small>
+            <span className="nsi-item-toggle">
+              <input
+                type="checkbox"
+                checked={allowFractional}
+                onChange={(e) => setAllowFractional(e.target.checked)}
+              />
+              <span>Использовать дробные числа</span>
+            </span>
           </label>
-          <label>
-            <small>Округление</small><br />
-            <input type="number" value={roundingPrecision} onChange={(e) => setRoundingPrecision(toNum(e.target.value))} />
+
+          <label className="field">
+            <small>Округление</small>
+            <input
+              type="number"
+              min={0}
+              value={roundingPrecision}
+              readOnly={!allowFractional}
+              onChange={(e) => {
+                if (!allowFractional) return;
+                setRoundingPrecision(toNum(e.target.value));
+              }}
+            />
           </label>
-          <div style={{ flex: 1 }} />
-          <span className="badge">{sourceLabel}</span>
+
+          <label className="field nsi-item-toggle-field">
+            <small>&nbsp;</small>
+            <span className="nsi-item-toggle">
+              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+              <span>Активен</span>
+            </span>
+          </label>
         </div>
 
         <div style={{ marginTop: 10 }}>
@@ -345,7 +394,7 @@ export default function NsiItemCreatePage() {
           </div>
         )}
 
-        <div className="row" style={{ marginTop: 12 }}>
+        <div className="row nsi-item-actions" style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => nav("/nsi/items")}>Отмена</button>
           <button className="btn primary" onClick={create} disabled={exactNameDuplicate}>Создать</button>
         </div>

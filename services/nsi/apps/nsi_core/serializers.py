@@ -104,7 +104,7 @@ class ItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Item
-        fields = ["id", "sku", "name", "category", "is_active", "policy", "packages"]
+        fields = ["id", "sku", "name", "category", "density_kg_per_l", "is_active", "policy", "packages"]
 
     def _default_policy(self, category: ItemCategory) -> dict:
         u = category.default_uom
@@ -193,7 +193,7 @@ class ItemLookupSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Item
-        fields = ["id", "sku", "name", "category", "is_active", "policy"]
+        fields = ["id", "sku", "name", "category", "density_kg_per_l", "is_active", "policy"]
 
 
 class ConversionRuleSerializer(serializers.ModelSerializer):

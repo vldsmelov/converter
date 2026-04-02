@@ -375,6 +375,42 @@ def apply_rule_base_to_base(qty_base: Decimal, from_cat: str, to_cat: str, rule:
 
     raise HTTPException(status_code=422, detail=f"Rule type {rtype} cannot convert {from_cat} -> {to_cat}")
 
+
+def apply_item_density_fallback_base_to_base(
+    qty_base: Decimal,
+    from_cat: str,
+    to_cat: str,
+    density_kg_per_l: Optional[Decimal],
+) -> Optional[Tuple[Decimal, Dict[str, Any]]]:
+    if density_kg_per_l is None or density_kg_per_l <= 0:
+        return None
+
+    pair = {from_cat, to_cat}
+    if pair != {"MASS", "VOLUME"}:
+        return None
+
+    if from_cat == "MASS" and to_cat == "VOLUME":
+        return (
+            qty_base / density_kg_per_l,
+            {
+                "density_kg_per_l": str(density_kg_per_l),
+                "direction": "kg->l",
+                "source": "item_density",
+            },
+        )
+
+    if from_cat == "VOLUME" and to_cat == "MASS":
+        return (
+            qty_base * density_kg_per_l,
+            {
+                "density_kg_per_l": str(density_kg_per_l),
+                "direction": "l->kg",
+                "source": "item_density",
+            },
+        )
+
+    return None
+
 async def find_category_path_and_convert(
     client: httpx.AsyncClient,
     token: str,
@@ -385,6 +421,7 @@ async def find_category_path_and_convert(
     context: dict,
     on_date: date,
     steps: List[Step],
+    item_density_kg_per_l: Optional[Decimal] = None,
 ) -> Tuple[Decimal, str]:
     if start_cat == target_cat:
         return qty_base_start, start_cat
@@ -415,27 +452,48 @@ async def find_category_path_and_convert(
             # With trailing slash Django router can resolve to "/rules/{pk}/" and return 403/405.
             resp = await nsi_post(client, token, "/api/v1/rules/match", payload)
             if resp.get("_not_found"):
-                continue
+                density_fallback = apply_item_density_fallback_base_to_base(
+                    qty_base=qty_base,
+                    from_cat=cat,
+                    to_cat=nxt,
+                    density_kg_per_l=item_density_kg_per_l,
+                )
+                if density_fallback is None:
+                    continue
 
-            rule = resp["rule"]
-            qty_next, meta = apply_rule_base_to_base(qty_base, cat, nxt, rule)
+                qty_next, meta = density_fallback
+                step = Step(
+                    kind="RULE",
+                    description="Apply density from item card (fallback)",
+                    from_qty=qty_base,
+                    from_uom=CATEGORY_BASE_UOM[cat],
+                    to_qty=qty_next,
+                    to_uom=CATEGORY_BASE_UOM[nxt],
+                    meta={
+                        "rule_type": "density",
+                        **meta,
+                    },
+                )
+            else:
+                rule = resp["rule"]
+                qty_next, meta = apply_rule_base_to_base(qty_base, cat, nxt, rule)
 
-            step = Step(
-                kind="RULE",
-                description=f"Apply rule {rule['rule_type']} (rule_id={rule['id']}, v{rule['version']})",
-                from_qty=qty_base,
-                from_uom=CATEGORY_BASE_UOM[cat],
-                to_qty=qty_next,
-                to_uom=CATEGORY_BASE_UOM[nxt],
-                meta={
-                    "rule_id": rule["id"],
-                    "logical_id": rule["logical_id"],
-                    "version": rule["version"],
-                    "rule_type": rule["rule_type"],
-                    "conditions": rule.get("conditions", {}),
-                    **meta,
-                }
-            )
+                step = Step(
+                    kind="RULE",
+                    description=f"Apply rule {rule['rule_type']} (rule_id={rule['id']}, v{rule['version']})",
+                    from_qty=qty_base,
+                    from_uom=CATEGORY_BASE_UOM[cat],
+                    to_qty=qty_next,
+                    to_uom=CATEGORY_BASE_UOM[nxt],
+                    meta={
+                        "rule_id": rule["id"],
+                        "logical_id": rule["logical_id"],
+                        "version": rule["version"],
+                        "rule_type": rule["rule_type"],
+                        "conditions": rule.get("conditions", {}),
+                        **meta,
+                    },
+                )
 
             new_steps = local_steps + [step]
             if nxt == target_cat:
@@ -496,6 +554,16 @@ async def convert(
 
     steps: List[Step] = []
     warnings: List[str] = []
+
+    item_density_kg_per_l: Optional[Decimal] = None
+    density_raw = item.get("density_kg_per_l")
+    if density_raw not in (None, ""):
+        try:
+            density_candidate = d(density_raw)
+            if density_candidate > 0:
+                item_density_kg_per_l = density_candidate
+        except Exception:
+            warnings.append("Item density value is invalid and was ignored.")
 
     # РѕРїСЂРµРґРµР»РёС‚СЊ target uom
     target_uom_code: str
@@ -580,6 +648,7 @@ async def convert(
                 context=rule_context,
                 on_date=on_date,
                 steps=steps,
+                item_density_kg_per_l=item_density_kg_per_l,
             )
 
     # 5) С‚РµРїРµСЂСЊ cur_qty_base РІ Р±Р°Р·Рµ target РєР°С‚РµРіРѕСЂРёРё; РїРµСЂРµРІРµСЃС‚Рё РІ target uom

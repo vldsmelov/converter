@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import decimal
 import uuid
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils import timezone
 
@@ -36,6 +38,13 @@ class Item(models.Model):
         "catalog.ItemCategory",
         on_delete=models.PROTECT,
         related_name="items",
+    )
+    density_kg_per_l = models.DecimalField(
+        max_digits=18,
+        decimal_places=9,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(decimal.Decimal("0.000000001"))],
     )
 
     is_active = models.BooleanField(default=True)

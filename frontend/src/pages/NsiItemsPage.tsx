@@ -5,7 +5,7 @@ import { requestJson } from "../api/request";
 import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
 
-type ItemColumnKey = "id" | "name" | "sku" | "category" | "storage_uom" | "source" | "active";
+type ItemColumnKey = "id" | "name" | "sku" | "category" | "storage_uom" | "density" | "source" | "active";
 type ItemColumnDef = { key: ItemColumnKey; label: string; weight: number };
 
 const COLUMN_VISIBILITY_STORAGE_KEY = "nsi_items_visible_columns_v1";
@@ -17,6 +17,7 @@ const ITEM_COLUMNS: ItemColumnDef[] = [
   { key: "sku", label: "SKU", weight: 12 },
   { key: "category", label: "Категория", weight: 18 },
   { key: "storage_uom", label: "Единица хранения", weight: 12 },
+  { key: "density", label: "Плотность, кг/л", weight: 12 },
   { key: "source", label: "Источник", weight: 11 },
   { key: "active", label: "Активен", weight: 10 },
 ];
@@ -27,6 +28,7 @@ const DEFAULT_VISIBLE_COLUMNS: Record<ItemColumnKey, boolean> = {
   sku: true,
   category: true,
   storage_uom: true,
+  density: true,
   source: true,
   active: true,
 };
@@ -159,6 +161,10 @@ export default function NsiItemsPage() {
     if (key === "sku") return <span title={it.sku ?? ""}>{it.sku ?? "—"}</span>;
     if (key === "category") return <span title={catName(it.category)}>{catName(it.category)}</span>;
     if (key === "storage_uom") return <span className="badge">{uomCode(su)}</span>;
+    if (key === "density") {
+      const raw = it?.density_kg_per_l;
+      return raw == null || raw === "" ? "—" : String(raw);
+    }
     if (key === "source") {
       if (src === "default") return <span className="badge">по умолчанию</span>;
       if (src === "manual") return <span className="badge">вручную</span>;
