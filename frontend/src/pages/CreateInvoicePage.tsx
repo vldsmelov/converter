@@ -93,6 +93,8 @@ export default function CreateInvoicePage() {
   const [uomCats, setUomCats] = useState<UomCat[]>([]);
   const [cats, setCats] = useState<Cat[]>([]);
   const [defaultFields, setDefaultFields] = useState<any[]>([]);
+  const [counterparties, setCounterparties] = useState<any[]>([]);
+  const [itemRuleSuppliers, setItemRuleSuppliers] = useState<Record<number, string[]>>({});
   const [err, setErr] = useState<string | null>(null);
 
   const [number, setNumber] = useState(randNo());
@@ -132,7 +134,24 @@ export default function CreateInvoicePage() {
   const uomByCode = useMemo(() => new Map<string, any>(uoms.map((u: any) => [up(u.code), u])), [uoms]);
   const uomCatCodeById = useMemo(() => new Map<number, string>(uomCats.map((c: any) => [c.id, up(c.code)])), [uomCats]);
   const uomCodeById = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-");
-  const uomOptions = useMemo(() => (uoms ?? []).map((u: any) => u.code), [uoms]);
+  const uomOptions = useMemo(
+    () => (uoms ?? []).map((u: any) => ({ code: up(u.code), label: `${String(u.name ?? u.code)} (${up(u.code)})` })),
+    [uoms]
+  );
+  const counterpartyNames = useMemo(
+    () => (counterparties ?? [])
+      .map((x: any) => String(x?.name ?? "").trim())
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "ru")),
+    [counterparties]
+  );
+
+  const uomLabelByCode = (code: string | null | undefined) => {
+    const normalized = up(code);
+    const u = uomByCode.get(normalized);
+    if (!u) return normalized || "-";
+    return `${String(u.name ?? u.code)} (${normalized})`;
+  };
 
   function uomCategoryCodeByUomCode(code: string | null | undefined): string | null {
     if (!code) return null;
@@ -172,24 +191,92 @@ export default function CreateInvoicePage() {
     return null;
   }
 
+  function parseRows(payload: any): any[] {
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.results)) return payload.results;
+    return [];
+  }
+
+  function supplierOptionsForItem(itemId: number | null): string[] {
+    const bag = new Set<string>();
+    if (!itemId) return [];
+
+    for (const s of (itemRuleSuppliers[itemId] ?? [])) {
+      const v = String(s ?? "").trim();
+      if (v) bag.add(v.toLowerCase());
+    }
+
+    const it = items.find((x: any) => x.id === itemId);
+    const packages = Array.isArray(it?.packages) ? it.packages : [];
+    for (const p of packages) {
+      const v = String(p?.supplier_code ?? "").trim();
+      if (v) bag.add(v.toLowerCase());
+    }
+
+    for (const s of counterpartyNames) {
+      bag.add(String(s).trim().toLowerCase());
+    }
+
+    const values = Array.from(bag)
+      .map((s) => {
+        const foundCounterparty = counterpartyNames.find((name) => name.toLowerCase() === s);
+        if (foundCounterparty) return foundCounterparty;
+        const fromRule = (itemRuleSuppliers[itemId] ?? []).find((name) => String(name).trim().toLowerCase() === s);
+        if (fromRule) return fromRule;
+        const fromPkg = packages
+          .map((p: any) => String(p?.supplier_code ?? "").trim())
+          .find((name: string) => name.toLowerCase() === s);
+        return fromPkg ?? s;
+      })
+      .filter(Boolean);
+
+    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ru"));
+  }
+
   async function loadRefs() {
     if (!token) return;
     setErr(null);
 
     try {
-      const [it, u, uc, c, df] = await Promise.all([
+      const [itRaw, uRaw, ucRaw, cRaw, dfRaw, cpRaw, rulesRaw] = await Promise.all([
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`, token }),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/counterparties/?active=1`, token }).catch(() => []),
+        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/?status=active`, token }).catch(() => []),
       ]);
+
+      const it = parseRows(itRaw);
+      const u = parseRows(uRaw);
+      const uc = parseRows(ucRaw);
+      const c = parseRows(cRaw);
+      const df = parseRows(dfRaw);
+      const cps = parseRows(cpRaw);
+      const rules = parseRows(rulesRaw);
+
+      const byItem = new Map<number, Set<string>>();
+      for (const r of rules) {
+        const itemId = Number(r?.item ?? 0);
+        if (itemId <= 0) continue;
+        const supplier = String((r?.conditions ?? {})?.supplier_code ?? "").trim();
+        if (!supplier) continue;
+        if (!byItem.has(itemId)) byItem.set(itemId, new Set<string>());
+        byItem.get(itemId)!.add(supplier);
+      }
+      const suppliersMap: Record<number, string[]> = {};
+      for (const [itemId, names] of byItem.entries()) {
+        suppliersMap[itemId] = Array.from(names).sort((a, b) => a.localeCompare(b, "ru"));
+      }
 
       setItems(it ?? []);
       setUoms(u ?? []);
       setUomCats(uc ?? []);
       setCats(c ?? []);
       setDefaultFields(df ?? []);
+      setCounterparties(cps ?? []);
+      setItemRuleSuppliers(suppliersMap);
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
@@ -248,10 +335,12 @@ export default function CreateInvoicePage() {
   function onEditorItemChange(itemId: number | null) {
     const it = items.find((x: any) => x.id === itemId);
     const posting = itemPostingUomCode(it);
+    const supplierOptions = supplierOptionsForItem(itemId);
     setEditor((prev) => ({
       ...prev,
       item_id: itemId,
       uom_code: prev.uom_code === "KG" && posting ? posting : prev.uom_code,
+      supplier_code: supplierOptions.some((x) => x === prev.supplier_code) ? prev.supplier_code : "",
     }));
   }
 
@@ -520,6 +609,11 @@ export default function CreateInvoicePage() {
     return { name, cat, posting };
   }, [lines, items, cats]);
 
+  const editorSupplierOptions = useMemo(
+    () => supplierOptionsForItem(editor.item_id),
+    [editor.item_id, itemRuleSuppliers, items, counterpartyNames]
+  );
+
   async function create() {
     if (!token) {
       setErr("Нет токена авторизации (перелогиньтесь).");
@@ -587,7 +681,7 @@ export default function CreateInvoicePage() {
   }
 
   return (
-    <div className="card">
+    <div className="card invoice-create-page">
       <PageHeader
         title="Создание накладной"
         subtitle="Табличная часть и проверка правил конвертации по строкам."
@@ -596,8 +690,8 @@ export default function CreateInvoicePage() {
 
       {err && <div className="error-banner">{err}</div>}
 
-      <div className="card" style={{ marginTop: 12 }}>
-        <div className="row">
+      <div className="card invoice-create-meta" style={{ marginTop: 12 }}>
+        <div className="invoice-create-meta-grid">
           <label className="field">
             <small>Номер</small>
             <input value={number} onChange={(e) => setNumber(e.target.value)} />
@@ -610,12 +704,14 @@ export default function CreateInvoicePage() {
             <small>Дата</small>
             <input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} />
           </label>
-          <div style={{ flex: 1 }} />
-          <button className="btn" onClick={loadRefs}>Обновить справочники</button>
+          <div className="field invoice-create-refresh-field">
+            <small>&nbsp;</small>
+            <button className="btn" onClick={loadRefs}>Обновить справочники</button>
+          </div>
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 12 }}>
+      <div className="card invoice-create-lines-card" style={{ marginTop: 12 }}>
         <div className="row section-header">
           <h4 className="section-title">Табличная часть</h4>
           <button className="btn" onClick={startAddLine}>+ Добавить номенклатуру</button>
@@ -630,7 +726,7 @@ export default function CreateInvoicePage() {
                 <th>Кол-во</th>
                 <th>ЕИ</th>
                 <th>Штрихкод</th>
-                <th>Код поставщика</th>
+                <th>Вариант перевода</th>
                 <th>Проверка</th>
                 <th></th>
               </tr>
@@ -649,7 +745,7 @@ export default function CreateInvoicePage() {
                       </small>
                     </td>
                     <td className="num">{l.qty}</td>
-                    <td>{l.uom_code}</td>
+                    <td>{uomLabelByCode(l.uom_code)}</td>
                     <td>{l.barcode || "-"}</td>
                     <td>{l.supplier_code || "-"}</td>
                     <td>
@@ -703,7 +799,7 @@ export default function CreateInvoicePage() {
           </div>
         </div>
 
-        <div className="row" style={{ marginTop: 12 }}>
+        <div className="row invoice-create-actions" style={{ marginTop: 12 }}>
           <button className="btn" onClick={() => nav("/app")}>Отмена</button>
           <button className="btn primary" onClick={create} disabled={creating}>
             {creating ? "Создаю..." : "Создать накладную"}
@@ -732,8 +828,8 @@ export default function CreateInvoicePage() {
 
               <label className="field">
                 <small>ЕИ документа</small>
-                <select value={editor.uom_code} onChange={(e) => setEditor((v) => ({ ...v, uom_code: e.target.value }))}>
-                  {uomOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+                <select value={editor.uom_code} onChange={(e) => setEditor((v) => ({ ...v, uom_code: up(e.target.value) }))}>
+                  {uomOptions.map((u) => <option key={u.code} value={u.code}>{u.label}</option>)}
                 </select>
               </label>
 
@@ -743,8 +839,16 @@ export default function CreateInvoicePage() {
               </label>
 
               <label className="field">
-                <small>Код поставщика</small>
-                <input value={editor.supplier_code} onChange={(e) => setEditor((v) => ({ ...v, supplier_code: e.target.value }))} />
+                <small>Вариант перевода (контрагент)</small>
+                <input
+                  list="invoice-editor-supplier-options"
+                  value={editor.supplier_code}
+                  onChange={(e) => setEditor((v) => ({ ...v, supplier_code: e.target.value }))}
+                  placeholder="по умолчанию"
+                />
+                <datalist id="invoice-editor-supplier-options">
+                  {editorSupplierOptions.map((name) => <option key={name} value={name} />)}
+                </datalist>
               </label>
 
               <label className="field" style={{ gridColumn: "1 / -1" }}>

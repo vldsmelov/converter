@@ -16,6 +16,12 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function parseRows(payload: any): any[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.results)) return payload.results;
+  return [];
+}
+
 function invoiceStatusLabel(v: unknown) {
   const s = String(v ?? "").toLowerCase();
   if (s === "new") return "Новая";
@@ -43,12 +49,12 @@ export default function InvoicesPage() {
     if (!token) return;
     setErr(null);
     try {
-      const data = await requestJson<any[]>({
+      const data = await requestJson<any>({
         method: "GET",
         url: `${import.meta.env.VITE_DOCS_BASE_URL}/api/v1/invoices/`,
         token,
       });
-      setRows(data ?? []);
+      setRows(parseRows(data));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
@@ -114,23 +120,23 @@ export default function InvoicesPage() {
   const shown = filtered.length;
 
   return (
-    <div className="card">
+    <div className="card invoice-registry-page">
       <PageHeader
         title="Накладные"
         subtitle={`Реестр документов: показано ${shown} из ${total}`}
         right={
-          <>
+          <div className="row invoice-registry-actions">
             <button className="btn btn-tight" onClick={load}>Обновить</button>
             <button className="btn primary btn-tight" onClick={() => nav("/create")}>Создать накладную</button>
-          </>
+          </div>
         }
       />
 
       {err && <div className="error-banner">{err}</div>}
 
       <div className="card invoice-filters" style={{ marginTop: 10 }}>
-        <div className="row">
-          <label className="field" style={{ flex: 1, minWidth: 260 }}>
+        <div className="invoice-registry-filter-grid">
+          <label className="field invoice-registry-search-field">
             <small>Поиск (номер / поставщик)</small>
             <input
               value={q}

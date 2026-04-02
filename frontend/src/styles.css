@@ -941,6 +941,75 @@ small { color: var(--muted); }
   font-size: 13px;
 }
 
+.invoice-registry-page,
+.invoice-create-page {
+  padding: 8px;
+}
+
+.invoice-registry-actions,
+.invoice-create-actions {
+  gap: 8px;
+}
+
+.invoice-registry-filter-grid {
+  display: grid;
+  gap: 12px;
+  align-items: flex-end;
+  grid-template-columns: minmax(260px, 2.2fr) minmax(160px, 1fr) minmax(160px, 1fr) minmax(160px, 1fr);
+}
+
+.invoice-registry-search-field {
+  min-width: 0;
+}
+
+.invoice-create-meta-grid {
+  display: grid;
+  gap: 12px;
+  align-items: flex-end;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 1.3fr) minmax(170px, 0.9fr) minmax(200px, 1fr);
+}
+
+.invoice-create-refresh-field .btn {
+  width: 100%;
+}
+
+.invoice-registry-page .field > small,
+.invoice-create-page .field > small {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+}
+
+.invoice-registry-page .field input,
+.invoice-registry-page .field select,
+.invoice-create-page .field input,
+.invoice-create-page .field select {
+  height: 38px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.invoice-registry-page .btn,
+.invoice-create-page .btn {
+  height: 38px;
+  min-height: 38px;
+  padding: 7px 12px;
+  border-radius: 7px;
+}
+
+@media (max-width: 1000px) {
+  .invoice-registry-filter-grid {
+    grid-template-columns: minmax(220px, 1fr) minmax(180px, 1fr);
+  }
+
+  .invoice-create-meta-grid {
+    grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr);
+  }
+}
+
 .invoice-list-table th,
 .invoice-list-table td {
   padding: 5px 7px;
@@ -1068,6 +1137,17 @@ small { color: var(--muted); }
 .modal-grid input,
 .modal-grid select {
   width: 100%;
+}
+
+.invoice-create-page .modal-grid input,
+.invoice-create-page .modal-grid select,
+.invoice-create-page .item-lookup-input-wrap input {
+  height: 38px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  font-size: 13px;
+  box-sizing: border-box;
 }
 
 .admin-check-grid {
@@ -1379,6 +1459,10 @@ textarea {
     grid-template-columns: 1fr;
   }
   .feedback-grid {
+    grid-template-columns: 1fr;
+  }
+  .invoice-registry-filter-grid,
+  .invoice-create-meta-grid {
     grid-template-columns: 1fr;
   }
 }
