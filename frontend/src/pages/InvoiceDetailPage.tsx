@@ -1,11 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { requestJson } from "../api/request";
+import { requestJson, unwrapList } from "../api/request";
 import PageHeader from "../components/PageHeader";
 import { downloadWithAuth } from "../lib/download";
-
-type Invoice = any;
+import type { DocsInvoiceDto, DocsInvoiceFileDto, DocsInvoiceLineDto, NsiItemDto } from "../types/api";
 
 function fmtDate(s: string | null | undefined) {
   if (!s) return "-";
@@ -48,12 +47,12 @@ export default function InvoiceDetailPage() {
   const { token } = useAuth();
   const nav = useNavigate();
 
-  const [inv, setInv] = useState<Invoice | null>(null);
-  const [items, setItems] = useState<any[]>([]);
+  const [inv, setInv] = useState<DocsInvoiceDto | null>(null);
+  const [items, setItems] = useState<NsiItemDto[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState<"" | "calculate" | "generate">("");
 
-  const itemById = useMemo(() => new Map<number, any>(items.map((i: any) => [i.id, i])), [items]);
+  const itemById = useMemo(() => new Map<number, NsiItemDto>(items.map((i) => [i.id, i])), [items]);
   const lines = inv?.lines ?? [];
   const files = inv?.files ?? [];
 
@@ -77,12 +76,12 @@ export default function InvoiceDetailPage() {
     if (!token) return;
     setErr(null);
     try {
-      const [invoice, it] = await Promise.all([
-        requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_DOCS_BASE_URL}/api/v1/invoices/${invId}/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
+      const [invoice, itRaw] = await Promise.all([
+        requestJson<DocsInvoiceDto>({ method: "GET", url: `${import.meta.env.VITE_DOCS_BASE_URL}/api/v1/invoices/${invId}/`, token }),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
       ]);
       setInv(invoice);
-      setItems(it ?? []);
+      setItems(unwrapList<NsiItemDto>(itRaw));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
@@ -135,7 +134,7 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  async function downloadFile(f: any) {
+  async function downloadFile(f: DocsInvoiceFileDto) {
     if (!token) return;
     const url = String(f.download_url ?? "");
     const abs = url.startsWith("http") ? url : `${import.meta.env.VITE_DOCS_BASE_URL}${url}`;
@@ -246,7 +245,7 @@ export default function InvoiceDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {lines.map((l: any) => {
+              {lines.map((l: DocsInvoiceLineDto) => {
                 const it = itemById.get(l.item_id);
                 const name = it?.name ?? `item_id=${l.item_id}`;
                 const conv = l.converted;
@@ -290,7 +289,7 @@ export default function InvoiceDetailPage() {
                 <tr><th>Тип</th><th>Файл</th><th className="num">Размер</th><th>Создан</th><th></th></tr>
               </thead>
               <tbody>
-                {files.map((f: any, idx: number) => (
+                {files.map((f: DocsInvoiceFileDto, idx: number) => (
                   <tr key={idx}>
                     <td><span className="badge">{f.file_type}</span></td>
                     <td><small>{String(f.file_name ?? f.download_url ?? "-")}</small></td>

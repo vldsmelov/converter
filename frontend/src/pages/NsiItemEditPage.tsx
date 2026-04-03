@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { requestJson } from "../api/request";
+import { requestJson, unwrapList } from "../api/request";
 import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
 
@@ -52,12 +52,6 @@ export default function NsiItemEditPage() {
     return names.filter((x) => normalizeName(x).includes(needle)).slice(0, 10);
   }, [existingItems, name, itemId]);
 
-  function parseRows(payload: any): any[] {
-    if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.results)) return payload.results;
-    return [];
-  }
-
   async function loadAllItems(tokenValue: string): Promise<Array<{ id: number; name: string }>> {
     const map = new Map<number, string>();
     let nextUrl: string | null = `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/?limit=500`;
@@ -65,7 +59,7 @@ export default function NsiItemEditPage() {
 
     while (nextUrl && pageGuard < 40) {
       const payload: any = await requestJson({ method: "GET", url: nextUrl, token: tokenValue });
-      const rows = parseRows(payload);
+      const rows = unwrapList<any>(payload);
       for (const row of rows) {
         const currentId = Number(row?.id ?? 0);
         const nm = String(row?.name ?? "").trim();

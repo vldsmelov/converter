@@ -226,3 +226,109 @@ def test_invoice_calculate_and_generate_e2e():
     rp.raise_for_status()
     assert (rp.headers.get("Content-Type") or "").startswith("application/pdf")
     assert rp.content[:4] == b"%PDF"
+
+
+def test_invoice_supplier_variants_and_target_uom_e2e():
+    _wait_until(lambda: requests.get(f"{NSI_URL}/healthz", timeout=5).status_code == 200, err="NSI not ready")
+    _wait_until(lambda: requests.get(f"{DOCUMENTS_URL}/healthz", timeout=5).status_code == 200, err="Documents not ready")
+
+    token = _token("operator", "operator")
+
+    # 1) Load one seeded bulk item.
+    items = _get_json(f"{NSI_URL}/api/v1/items/", token)
+    by_sku = {str(x.get("sku")): x for x in items}
+    bulk_item = by_sku["BULK-CRUSH-M800-20-40-001"]
+    item_id = int(bulk_item["id"])
+
+    # 2) Resolve category ids for COUNT <-> MASS rule.
+    cats = _get_json(f"{NSI_URL}/api/v1/uom-categories/", token)
+    count_cat_id = next(int(c["id"]) for c in cats if str(c.get("code")) == "COUNT")
+    mass_cat_id = next(int(c["id"]) for c in cats if str(c.get("code")) == "MASS")
+
+    # 3) Create supplier-specific active rules with unique supplier names.
+    suffix = uuid.uuid4().hex[:6]
+    supplier_a = f"E2E-SUP-A-{suffix}"
+    supplier_b = f"E2E-SUP-B-{suffix}"
+
+    _post_json(
+        f"{NSI_URL}/api/v1/rules/",
+        token,
+        {
+            "item": item_id,
+            "from_category": count_cat_id,
+            "to_category": mass_cat_id,
+            "rule_type": "pcs_weight",
+            "conditions": {"supplier_code": supplier_a},
+            "params": {"kg_per_pc": "40"},
+            "priority": 200,
+            "status": "active",
+        },
+    )
+    _post_json(
+        f"{NSI_URL}/api/v1/rules/",
+        token,
+        {
+            "item": item_id,
+            "from_category": count_cat_id,
+            "to_category": mass_cat_id,
+            "rule_type": "pcs_weight",
+            "conditions": {"supplier_code": supplier_b},
+            "params": {"kg_per_pc": "55"},
+            "priority": 200,
+            "status": "active",
+        },
+    )
+
+    # 4) Create invoice lines as conversion instructions with explicit target UOM.
+    inv = _post_json(
+        f"{DOCUMENTS_URL}/api/v1/invoices/",
+        token,
+        {
+            "number": f"INV-SUP-{uuid.uuid4().hex[:6]}",
+            "supplier": "ACME",
+            "doc_date": "2026-04-03",
+            "lines": [
+                {
+                    "line_no": 1,
+                    "item_id": item_id,
+                    "qty": "2",
+                    "uom_code": "BAG",
+                    "to_uom_code": "KG",
+                    "supplier_code": supplier_a,
+                    "context": {"item_name": str(bulk_item["name"])},
+                },
+                {
+                    "line_no": 2,
+                    "item_id": item_id,
+                    "qty": "2",
+                    "uom_code": "BAG",
+                    "to_uom_code": "KG",
+                    "supplier_code": supplier_b,
+                    "context": {"item_name": str(bulk_item["name"])},
+                },
+            ],
+        },
+    )
+    invoice_id = int(inv["id"])
+
+    # 5) Calculate and verify supplier variants are applied.
+    r = requests.post(f"{DOCUMENTS_URL}/api/v1/invoices/{invoice_id}/calculate/", headers=_h(token), timeout=20)
+    r.raise_for_status()
+    inv_calc = _wait_invoice_status(token, invoice_id, "calculated", timeout_s=180)
+
+    lines = {int(l["line_no"]): l for l in inv_calc["lines"]}
+    l1 = lines[1]["converted"]
+    l2 = lines[2]["converted"]
+
+    assert _dec(l1["posting_qty"]) == Decimal("80.000000")
+    assert l1["posting_uom_code"] == "KG"
+    assert _dec(l2["posting_qty"]) == Decimal("110.000000")
+    assert l2["posting_uom_code"] == "KG"
+
+    # 6) Recalculate once more (must be allowed and stable).
+    r = requests.post(f"{DOCUMENTS_URL}/api/v1/invoices/{invoice_id}/calculate/", headers=_h(token), timeout=20)
+    r.raise_for_status()
+    inv_calc_2 = _wait_invoice_status(token, invoice_id, "calculated", timeout_s=180)
+    lines2 = {int(l["line_no"]): l for l in inv_calc_2["lines"]}
+    assert _dec(lines2[1]["converted"]["posting_qty"]) == Decimal("80.000000")
+    assert _dec(lines2[2]["converted"]["posting_qty"]) == Decimal("110.000000")

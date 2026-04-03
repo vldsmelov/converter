@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { requestJson } from "../api/request";
+import { requestJson, unwrapList } from "../api/request";
 import PageHeader from "../components/PageHeader";
 import { conditionLabel, ruleParamLabel, ruleTypeLabel } from "../lib/ruLabels";
 
@@ -71,12 +71,6 @@ const DEFAULT_ITEM_COLUMNS: Record<ItemColumnKey, boolean> = {
   params: true,
   status: true,
 };
-
-function parseRows(payload: any): any[] {
-  if (Array.isArray(payload)) return payload;
-  if (payload && Array.isArray(payload.results)) return payload.results;
-  return [];
-}
 
 function readStoredVisibleColumns<T extends string>(
   storageKey: string,
@@ -197,12 +191,12 @@ export default function NsiRulesPage() {
         requestJson<any>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/`, token }),
       ]);
 
-      setUoms(parseRows(uRaw));
-      setItems(parseRows(itRaw));
-      setItemCats(parseRows(icRaw));
-      setGlobalRules(parseRows(grRaw));
-      setCatPkgs(parseRows(cpRaw));
-      setRules(parseRows(rlRaw));
+      setUoms(unwrapList<any>(uRaw));
+      setItems(unwrapList<any>(itRaw));
+      setItemCats(unwrapList<any>(icRaw));
+      setGlobalRules(unwrapList<any>(grRaw));
+      setCatPkgs(unwrapList<any>(cpRaw));
+      setRules(unwrapList<any>(rlRaw));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }

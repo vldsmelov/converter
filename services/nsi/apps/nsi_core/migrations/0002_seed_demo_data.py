@@ -47,7 +47,7 @@ def seed_demo(apps, schema_editor):
     uom("M", "Метр", "LENGTH", "1", 3)
     uom("CM", "Сантиметр", "LENGTH", "0.01", 0)
 
-    pcs = uom("PCS", "Штука", "COUNT", "1", 0)
+    uom("PCS", "Штука", "COUNT", "1", 0)
     bag = uom("BAG", "Мешок", "COUNT", "1", 0)
 
     # ---- Demo Item ----

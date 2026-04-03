@@ -1,16 +1,20 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { ApiError, requestJson } from "../api/request";
+import { ApiError, requestJson, unwrapList } from "../api/request";
 import ItemLookup from "../components/ItemLookup";
 import TextLookup from "../components/TextLookup";
 import PageHeader from "../components/PageHeader";
 import { ruleParamLabel, ruleTypeLabel, uomCategoryLabel } from "../lib/ruLabels";
-
-type Item = any;
-type Uom = any;
-type Cat = any;
-type UomCat = any;
+import type {
+  ConvertResponseDto,
+  NsiCounterpartyDto,
+  NsiItemCategoryDto,
+  NsiItemDto,
+  NsiRuleDto,
+  NsiUomCategoryDto,
+  NsiUomDto,
+} from "../types/api";
 
 type Line = {
   key: string;
@@ -44,6 +48,8 @@ type ParsedConvertError = {
   suggestedSteps: SuggestedRuleStep[];
 };
 
+type CreateInvoiceResponse = { id: number };
+
 function randNo() {
   return `НК-${Math.random().toString(16).slice(2, 8).toUpperCase()}`;
 }
@@ -52,7 +58,7 @@ function uid() {
   return Math.random().toString(16).slice(2) + Date.now().toString(16);
 }
 
-function up(s: any) {
+function up(s: unknown) {
   return String(s ?? "").toUpperCase();
 }
 
@@ -85,11 +91,11 @@ export default function CreateInvoicePage() {
   const { token } = useAuth();
   const nav = useNavigate();
 
-  const [items, setItems] = useState<Item[]>([]);
-  const [uoms, setUoms] = useState<Uom[]>([]);
-  const [uomCats, setUomCats] = useState<UomCat[]>([]);
-  const [cats, setCats] = useState<Cat[]>([]);
-  const [counterparties, setCounterparties] = useState<any[]>([]);
+  const [items, setItems] = useState<NsiItemDto[]>([]);
+  const [uoms, setUoms] = useState<NsiUomDto[]>([]);
+  const [uomCats, setUomCats] = useState<NsiUomCategoryDto[]>([]);
+  const [cats, setCats] = useState<NsiItemCategoryDto[]>([]);
+  const [counterparties, setCounterparties] = useState<NsiCounterpartyDto[]>([]);
   const [itemRuleSuppliers, setItemRuleSuppliers] = useState<Record<number, string[]>>({});
   const [err, setErr] = useState<string | null>(null);
 
@@ -112,20 +118,20 @@ export default function CreateInvoicePage() {
     note: "",
   });
 
-  const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
+  const catById = useMemo(() => new Map<number, NsiItemCategoryDto>(cats.map((c) => [c.id, c])), [cats]);
   const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "-");
 
-  const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
-  const uomByCode = useMemo(() => new Map<string, any>(uoms.map((u: any) => [up(u.code), u])), [uoms]);
-  const uomCatCodeById = useMemo(() => new Map<number, string>(uomCats.map((c: any) => [c.id, up(c.code)])), [uomCats]);
+  const uomById = useMemo(() => new Map<number, NsiUomDto>(uoms.map((u) => [u.id, u])), [uoms]);
+  const uomByCode = useMemo(() => new Map<string, NsiUomDto>(uoms.map((u) => [up(u.code), u])), [uoms]);
+  const uomCatCodeById = useMemo(() => new Map<number, string>(uomCats.map((c) => [c.id, up(c.code)])), [uomCats]);
   const uomCodeById = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-");
   const uomOptions = useMemo(
-    () => (uoms ?? []).map((u: any) => ({ code: up(u.code), label: `${String(u.name ?? u.code)} (${up(u.code)})` })),
+    () => (uoms ?? []).map((u) => ({ code: up(u.code), label: `${String(u.name ?? u.code)} (${up(u.code)})` })),
     [uoms]
   );
   const counterpartyNames = useMemo(
     () => (counterparties ?? [])
-      .map((x: any) => String(x?.name ?? "").trim())
+      .map((x) => String(x?.name ?? "").trim())
       .filter(Boolean)
       .sort((a, b) => a.localeCompare(b, "ru")),
     [counterparties]
@@ -148,7 +154,7 @@ export default function CreateInvoicePage() {
   function pickUomCodeForCategory(categoryCode: string | null | undefined): string | null {
     if (!categoryCode) return null;
     const cc = up(categoryCode);
-    const inCategory = uoms.filter((u: any) => up(uomCatCodeById.get(u.category)) === cc);
+    const inCategory = uoms.filter((u) => up(uomCatCodeById.get(u.category)) === cc);
     if (!inCategory.length) return null;
 
     const preferredCode =
@@ -163,23 +169,17 @@ export default function CreateInvoicePage() {
               : "";
 
     if (preferredCode) {
-      const preferred = inCategory.find((u: any) => up(u.code) === preferredCode);
+      const preferred = inCategory.find((u) => up(u.code) === preferredCode);
       if (preferred) return up(preferred.code);
     }
 
     return up(inCategory[0].code);
   }
 
-  function itemPostingUomCode(it: any): string | null {
+  function itemPostingUomCode(it: NsiItemDto | null | undefined): string | null {
     const id = it?.policy?.posting_uom;
     if (typeof id === "number") return uomCodeById(id);
     return null;
-  }
-
-  function parseRows(payload: any): any[] {
-    if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.results)) return payload.results;
-    return [];
   }
 
   function supplierOptionsForItem(itemId: number | null): string[] {
@@ -191,7 +191,7 @@ export default function CreateInvoicePage() {
       if (v) bag.add(v.toLowerCase());
     }
 
-    const it = items.find((x: any) => x.id === itemId);
+    const it = items.find((x) => x.id === itemId);
     const packages = Array.isArray(it?.packages) ? it.packages : [];
     for (const p of packages) {
       const v = String(p?.supplier_code ?? "").trim();
@@ -209,7 +209,7 @@ export default function CreateInvoicePage() {
         const fromRule = (itemRuleSuppliers[itemId] ?? []).find((name) => String(name).trim().toLowerCase() === s);
         if (fromRule) return fromRule;
         const fromPkg = packages
-          .map((p: any) => String(p?.supplier_code ?? "").trim())
+          .map((p) => String(p?.supplier_code ?? "").trim())
           .find((name: string) => name.toLowerCase() === s);
         return fromPkg ?? s;
       })
@@ -224,26 +224,26 @@ export default function CreateInvoicePage() {
 
     try {
       const [itRaw, uRaw, ucRaw, cRaw, cpRaw, rulesRaw] = await Promise.all([
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/counterparties/?active=1`, token }).catch(() => []),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/?status=active`, token }).catch(() => []),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/counterparties/?active=1`, token }).catch(() => []),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/?status=active`, token }).catch(() => []),
       ]);
 
-      const it = parseRows(itRaw);
-      const u = parseRows(uRaw);
-      const uc = parseRows(ucRaw);
-      const c = parseRows(cRaw);
-      const cps = parseRows(cpRaw);
-      const rules = parseRows(rulesRaw);
+      const it = unwrapList<NsiItemDto>(itRaw);
+      const u = unwrapList<NsiUomDto>(uRaw);
+      const uc = unwrapList<NsiUomCategoryDto>(ucRaw);
+      const c = unwrapList<NsiItemCategoryDto>(cRaw);
+      const cps = unwrapList<NsiCounterpartyDto>(cpRaw);
+      const rules = unwrapList<NsiRuleDto>(rulesRaw);
 
       const byItem = new Map<number, Set<string>>();
       for (const r of rules) {
         const itemId = Number(r?.item ?? 0);
         if (itemId <= 0) continue;
-        const supplier = String((r?.conditions ?? {})?.supplier_code ?? "").trim();
+        const supplier = String((r?.conditions ?? {})["supplier_code"] ?? "").trim();
         if (!supplier) continue;
         if (!byItem.has(itemId)) byItem.set(itemId, new Set<string>());
         byItem.get(itemId)!.add(supplier);
@@ -259,8 +259,8 @@ export default function CreateInvoicePage() {
       setCats(c ?? []);
       setCounterparties(cps ?? []);
       setItemRuleSuppliers(suppliersMap);
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -307,7 +307,7 @@ export default function CreateInvoicePage() {
   }
 
   function onEditorItemChange(itemId: number | null) {
-    const it = items.find((x: any) => x.id === itemId);
+    const it = items.find((x) => x.id === itemId);
     const posting = itemPostingUomCode(it);
     const supplierOptions = supplierOptionsForItem(itemId);
     setEditor((prev) => ({
@@ -329,7 +329,7 @@ export default function CreateInvoicePage() {
       return;
     }
     if (!editor.to_uom_code) {
-      setErr("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0438\u0442\u043e\u0433\u043e\u0432\u0443\u044e \u0415\u0418 \u0434\u043b\u044f \u0441\u0442\u0440\u043e\u043a\u0438.");
+      setErr("Выберите итоговую ЕИ для строки.");
       return;
     }
     setErr(null);
@@ -355,7 +355,7 @@ export default function CreateInvoicePage() {
   }
 
   function suggestRuleUrl(args: {
-    item: any;
+    item: NsiItemDto;
     fromCode: string;
     toCode?: string | null;
     ruleType?: string | null;
@@ -391,7 +391,7 @@ export default function CreateInvoicePage() {
     if (!token) return;
     if (!line.item_id || !line.uom_code || !line.to_uom_code) return;
 
-    const it = items.find((x: any) => x.id === line.item_id);
+    const it = items.find((x) => x.id === line.item_id);
     const posting = itemPostingUomCode(it);
     const targetUom = up(line.to_uom_code || posting || "");
 
@@ -400,7 +400,7 @@ export default function CreateInvoicePage() {
         ...m,
         [line.key]: {
           state: "ok",
-          message: `\u0423\u0441\u043f\u0435\u0448\u043d\u043e: \u0415\u0418 \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0430 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u0435\u0442 \u0441 \u0438\u0442\u043e\u0433\u043e\u0432\u043e\u0439 (${targetUom})`,
+          message: `Успешно: ЕИ источника совпадает с итоговой (${targetUom})`,
         },
       }));
       return;
@@ -412,7 +412,7 @@ export default function CreateInvoicePage() {
       const requestContext: Record<string, unknown> = {};
       const supplierCode = line.supplier_code || undefined;
       if (supplierCode) requestContext.supplier_code = supplierCode;
-      const res = await requestJson<any>({
+      const res = await requestJson<ConvertResponseDto>({
         method: "POST",
         url: `/conversion/api/v1/convert`,
         token,
@@ -436,8 +436,8 @@ export default function CreateInvoicePage() {
         [line.key]: {
           state: ok ? "ok" : "mismatch",
           message: ok
-            ? `\u0423\u0441\u043f\u0435\u0448\u043d\u043e: 1 ${up(line.uom_code)} -> ${resultQty} ${resultUom}`
-            : `\u0415\u0441\u0442\u044c \u043a\u043e\u043d\u0432\u0435\u0440\u0442\u0430\u0446\u0438\u044f, \u043d\u043e \u0438\u0442\u043e\u0433\u043e\u0432\u0430\u044f \u0415\u0418 (${resultUom}) \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u0435\u0442 \u0441 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0439 (${expectedUom}).`,
+            ? `Успешно: 1 ${up(line.uom_code)} -> ${resultQty} ${resultUom}`
+            : `Есть конвертация, но итоговая ЕИ (${resultUom}) не совпадает с выбранной (${expectedUom}).`,
           suggestedUrl: ok
             ? undefined
             : (it
@@ -445,10 +445,10 @@ export default function CreateInvoicePage() {
               : undefined),
         },
       }));
-    } catch (e: any) {
+    } catch (e: unknown) {
       const parsed = parseConvertError(e);
 
-      let message = "\u041d\u0435\u0442 \u043f\u043e\u0434\u0445\u043e\u0434\u044f\u0449\u0435\u0433\u043e \u043f\u0440\u0430\u0432\u0438\u043b\u0430 \u0434\u043b\u044f \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0430. \u041d\u0443\u0436\u043d\u043e \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u043f\u0440\u0430\u0432\u0438\u043b\u043e.";
+      let message = "Нет подходящего правила для перевода. Нужно создать правило.";
       let suggestedUrl = it ? suggestRuleUrl({ item: it, fromCode: line.uom_code, toCode: targetUom || posting }) : undefined;
 
       if (parsed) {
@@ -522,7 +522,7 @@ export default function CreateInvoicePage() {
 
   const exampleRow = useMemo(() => {
     const l = lines[0];
-    const it = items.find((x: any) => x.id === l?.item_id);
+    const it = items.find((x) => x.id === l?.item_id);
     const name = it?.name ?? "-";
     const cat = it?.category ? catName(it.category) : "-";
     const posting = itemPostingUomCode(it) ?? "-";
@@ -555,7 +555,7 @@ export default function CreateInvoicePage() {
 
     const cleanLines = lines
       .map((l, idx) => {
-        const it = items.find((x: any) => x.id === l.item_id);
+        const it = items.find((x) => x.id === l.item_id);
         const context: Record<string, unknown> = {
           item_name: it?.name ?? "",
         };
@@ -582,15 +582,15 @@ export default function CreateInvoicePage() {
     }
 
     try {
-      const created = await requestJson<any>({
+      const created = await requestJson<CreateInvoiceResponse>({
         method: "POST",
         url: `${import.meta.env.VITE_DOCS_BASE_URL}/api/v1/invoices/`,
         token,
         body: { number, supplier, doc_date: docDate, lines: cleanLines },
       });
       nav(`/invoices/${created.id}`);
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
       setCreating(false);
     }
   }
@@ -649,7 +649,7 @@ export default function CreateInvoicePage() {
             <tbody>
               {lines.map((l, idx) => {
                 const ch = checks[l.key];
-                const it = items.find((x: any) => x.id === l.item_id);
+                const it = items.find((x) => x.id === l.item_id);
                 return (
                   <tr key={l.key}>
                     <td>{idx + 1}</td>

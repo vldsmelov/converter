@@ -1,4 +1,3 @@
-import React from "react";
 import BrandLogo from "./BrandLogo";
 
 const BITRIX_LINK =

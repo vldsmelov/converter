@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { ApiError, requestJson } from "../api/request";
+import { ApiError, requestJson, unwrapList } from "../api/request";
 import PageHeader from "../components/PageHeader";
 import { toNum } from "./nsi_utils";
 
@@ -56,12 +56,6 @@ export default function NsiItemCreatePage() {
       .slice(0, 10);
   }, [name, existingItemNames]);
 
-  function parseRows(payload: any): any[] {
-    if (Array.isArray(payload)) return payload;
-    if (payload && Array.isArray(payload.results)) return payload.results;
-    return [];
-  }
-
   async function loadAllItemNames(tokenValue: string): Promise<string[]> {
     const bag = new Set<string>();
     let nextUrl: string | null = `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/?limit=500`;
@@ -69,7 +63,7 @@ export default function NsiItemCreatePage() {
 
     while (nextUrl && pageGuard < 40) {
       const payload: any = await requestJson({ method: "GET", url: nextUrl, token: tokenValue });
-      const rows = parseRows(payload);
+      const rows = unwrapList<any>(payload);
       for (const row of rows) {
         const nm = String(row?.name ?? "").trim();
         if (nm) bag.add(nm);

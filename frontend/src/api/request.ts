@@ -1,4 +1,5 @@
 type Json = Record<string, unknown> | unknown[] | string | number | boolean | null;
+type ListEnvelope<T> = { results?: T[] } | T[];
 
 export class ApiError extends Error {
   status: number;
@@ -40,4 +41,12 @@ export async function requestJson<T = Json>(opts: {
     // some endpoints might return plain text
     return text as unknown as T;
   }
+}
+
+export function unwrapList<T>(payload: ListEnvelope<T> | unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === "object" && Array.isArray((payload as { results?: unknown[] }).results)) {
+    return (payload as { results: T[] }).results;
+  }
+  return [];
 }

@@ -1,4 +1,3 @@
-import React from "react";
 import logoSrc from "../assets/brand-logo.png";
 
 export default function BrandLogo(props: { compact?: boolean }) {

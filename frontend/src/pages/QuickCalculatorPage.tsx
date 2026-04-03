@@ -1,21 +1,20 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ApiError, requestJson } from "../api/request";
+import { ApiError, requestJson, unwrapList } from "../api/request";
 import AppFooter from "../components/AppFooter";
 import SiteTopbar from "../components/SiteTopbar";
 import ItemLookup from "../components/ItemLookup";
 import PageHeader from "../components/PageHeader";
 import { ruleParamLabel, ruleTypeLabel, uomCategoryLabel, uomLabel } from "../lib/ruLabels";
 import { toNum } from "./nsi_utils";
-
-type ConvertStep = {
-  kind?: string;
-  description?: string;
-  from_qty?: string;
-  from_uom?: string;
-  to_qty?: string;
-  to_uom?: string;
-};
+import type {
+  ConvertResponseDto,
+  ConvertStepDto,
+  NsiItemDto,
+  NsiRuleDto,
+  NsiUomCategoryDto,
+  NsiUomDto,
+} from "../types/api";
 
 type SuggestedRuleStep = {
   step?: number;
@@ -83,15 +82,15 @@ function stepKindLabel(v: unknown): string {
 export default function QuickCalculatorPage(props: { token?: string; publicMode?: boolean }) {
   const token = props.token;
   const nav = useNavigate();
-  const [theme, setTheme] = useState<"dark" | "light">(() => {
+  const [theme] = useState<"dark" | "light">(() => {
     const stored = window.localStorage.getItem("ui_theme");
     if (stored === "dark" || stored === "light") return stored;
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
 
-  const [items, setItems] = useState<any[]>([]);
-  const [uoms, setUoms] = useState<any[]>([]);
-  const [uomCats, setUomCats] = useState<any[]>([]);
+  const [items, setItems] = useState<NsiItemDto[]>([]);
+  const [uoms, setUoms] = useState<NsiUomDto[]>([]);
+  const [uomCats, setUomCats] = useState<NsiUomCategoryDto[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [calculating, setCalculating] = useState(false);
 
@@ -107,15 +106,15 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
 
   const [resultQtyRaw, setResultQtyRaw] = useState("");
   const [resultUom, setResultUom] = useState("");
-  const [steps, setSteps] = useState<ConvertStep[]>([]);
+  const [steps, setSteps] = useState<ConvertStepDto[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
   const [suggestedRuleUrl, setSuggestedRuleUrl] = useState<string | null>(null);
 
   const prevItemId = useRef<number | null>(null);
 
-  const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
-  const uomCatsById = useMemo(() => new Map<number, any>(uomCats.map((c: any) => [c.id, c])), [uomCats]);
-  const itemById = useMemo(() => new Map<number, any>(items.map((i: any) => [i.id, i])), [items]);
+  const uomById = useMemo(() => new Map<number, NsiUomDto>(uoms.map((u) => [u.id, u])), [uoms]);
+  const uomCatsById = useMemo(() => new Map<number, NsiUomCategoryDto>(uomCats.map((c) => [c.id, c])), [uomCats]);
+  const itemById = useMemo(() => new Map<number, NsiItemDto>(items.map((i) => [i.id, i])), [items]);
 
   const selectedItem = itemId ? itemById.get(itemId) : null;
   const supplierOptions = useMemo(() => {
@@ -157,13 +156,14 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     if (!selectedItem) return "";
     const packages = selectedItem.packages ?? [];
     const requestedSupplier = supplierCode.trim().toLowerCase();
-    let pkg = null as any;
+    type PackageRow = NonNullable<NsiItemDto["packages"]>[number];
+    let pkg: PackageRow | null = null;
     if (requestedSupplier) {
-      pkg = packages.find((p: any) => String(p?.supplier_code ?? "").trim().toLowerCase() === requestedSupplier)
-        ?? packages.find((p: any) => !String(p?.supplier_code ?? "").trim());
+      pkg = packages.find((p) => String(p?.supplier_code ?? "").trim().toLowerCase() === requestedSupplier)
+        ?? packages.find((p) => !String(p?.supplier_code ?? "").trim()) ?? null;
     } else {
-      pkg = packages.find((p: any) => !String(p?.supplier_code ?? "").trim())
-        ?? packages[0];
+      pkg = packages.find((p) => !String(p?.supplier_code ?? "").trim())
+        ?? packages[0] ?? null;
     }
     const pkgCode = pkg?.package_uom ? up(uomById.get(pkg.package_uom)?.code) : "";
     if (pkgCode) return pkgCode;
@@ -178,13 +178,13 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   }, [resultQtyRaw, useDefaultPrecision, roundPrecision]);
 
   const fromCatCode = useMemo(() => {
-    const u = uoms.find((x: any) => up(x.code) === up(fromUom));
+    const u = uoms.find((x) => up(x.code) === up(fromUom));
     if (!u) return "-";
     return up(uomCatsById.get(u.category)?.code ?? "-");
   }, [uoms, uomCatsById, fromUom]);
 
   const toCatCode = useMemo(() => {
-    const u = uoms.find((x: any) => up(x.code) === up(toUom));
+    const u = uoms.find((x) => up(x.code) === up(toUom));
     if (!u) return "-";
     return up(uomCatsById.get(u.category)?.code ?? "-");
   }, [uoms, uomCatsById, toUom]);
@@ -193,7 +193,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
 
   function uomCategoryCodeByUomCode(code: string | null | undefined): string | null {
     if (!code) return null;
-    const u = uoms.find((x: any) => up(x.code) === up(code));
+    const u = uoms.find((x) => up(x.code) === up(code));
     if (!u) return null;
     return up(uomCatsById.get(u.category)?.code ?? "");
   }
@@ -201,7 +201,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   function pickUomCodeForCategory(categoryCode: string | null | undefined): string | null {
     if (!categoryCode) return null;
     const cc = up(categoryCode);
-    const inCategory = uoms.filter((u: any) => up(uomCatsById.get(u.category)?.code ?? "") === cc);
+    const inCategory = uoms.filter((u) => up(uomCatsById.get(u.category)?.code ?? "") === cc);
     if (!inCategory.length) return null;
 
     const preferredCode =
@@ -216,14 +216,14 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
               : "";
 
     if (preferredCode) {
-      const preferred = inCategory.find((u: any) => up(u.code) === preferredCode);
+      const preferred = inCategory.find((u) => up(u.code) === preferredCode);
       if (preferred) return up(preferred.code);
     }
     return up(inCategory[0].code);
   }
 
   function suggestRuleUrl(args: {
-    item: any;
+    item: NsiItemDto;
     fromCode: string;
     toCode: string;
     ruleType?: string | null;
@@ -259,16 +259,16 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
   async function loadRefs() {
     setErr(null);
     try {
-      const [it, u, uc] = await Promise.all([
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
+      const [itRaw, uRaw, ucRaw] = await Promise.all([
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
+        requestJson<unknown>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
       ]);
-      setItems(it ?? []);
-      setUoms(u ?? []);
-      setUomCats(uc ?? []);
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
+      setItems(unwrapList<NsiItemDto>(itRaw));
+      setUoms(unwrapList<NsiUomDto>(uRaw));
+      setUomCats(unwrapList<NsiUomCategoryDto>(ucRaw));
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -297,12 +297,13 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
     }
 
     let cancelled = false;
-    requestJson<any[]>({
+    requestJson<unknown>({
       method: "GET",
       url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/?item=${itemId}&status=active`,
       token,
     })
-      .then((rows) => {
+      .then((rowsRaw) => {
+        const rows = unwrapList<NsiRuleDto>(rowsRaw);
         if (cancelled) return;
         const next = new Set<string>();
         const selectedPair = new Set([up(fromCatCode), up(toCatCode)]);
@@ -310,12 +311,12 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
         for (const r of rows ?? []) {
           if (!r || r.item !== itemId || r.status !== "active") continue;
           if (hasSelectedPair) {
-            const rf = up(uomCatsById.get(r.from_category)?.code ?? "");
-            const rt = up(uomCatsById.get(r.to_category)?.code ?? "");
+            const rf = up(typeof r.from_category === "number" ? uomCatsById.get(r.from_category)?.code ?? "" : "");
+            const rt = up(typeof r.to_category === "number" ? uomCatsById.get(r.to_category)?.code ?? "" : "");
             const rp = new Set([rf, rt]);
             if (!(rp.has(up(fromCatCode)) && rp.has(up(toCatCode)))) continue;
           }
-          const supplier = String((r.conditions ?? {}).supplier_code ?? "").trim();
+          const supplier = String((r.conditions ?? {})["supplier_code"] ?? "").trim();
           if (supplier) next.add(supplier);
         }
         setItemRuleSuppliers(Array.from(next).sort((a, b) => a.localeCompare(b, "ru")));
@@ -382,7 +383,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       const requestContext: Record<string, unknown> = {};
       const supplier = supplierCode.trim();
       if (supplier) requestContext.supplier_code = supplier;
-      const res = await requestJson<any>({
+      const res = await requestJson<ConvertResponseDto>({
         method: "POST",
         url: `/conversion/api/v1/convert`,
         token,
@@ -400,7 +401,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
       setResultUom(up(res?.to?.uom ?? toUom));
       setSteps(Array.isArray(res?.steps) ? res.steps : []);
       setWarnings(Array.isArray(res?.warnings) ? res.warnings : []);
-    } catch (e: any) {
+    } catch (e: unknown) {
       const parsed = parseConvertError(e);
       if (parsed && selectedItem) {
         let suggestedUrl = suggestRuleUrl({
@@ -449,7 +450,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           setErr(e.message);
         }
       } else {
-        setErr(e?.message ?? String(e));
+        setErr(e instanceof Error ? e.message : String(e));
       }
     } finally {
       setCalculating(false);
@@ -525,7 +526,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           <label className="field calculator-uom-field">
             <small>Входящая ЕИ</small>
             <select value={fromUom} onChange={(e) => setFromUom(up(e.target.value))}>
-              {uoms.map((u: any) => (
+              {uoms.map((u) => (
                 <option key={u.id} value={up(u.code)}>
                   {uomLabel(u.code)} ({uomCategoryLabel(uomCatsById.get(u.category)?.code ?? "-")})
                 </option>
@@ -541,7 +542,7 @@ export default function QuickCalculatorPage(props: { token?: string; publicMode?
           <label className="field calculator-uom-field">
             <small>Итоговая ЕИ</small>
             <select value={toUom} onChange={(e) => setToUom(up(e.target.value))}>
-              {uoms.map((u: any) => (
+              {uoms.map((u) => (
                 <option key={u.id} value={up(u.code)}>
                   {uomLabel(u.code)} ({uomCategoryLabel(uomCatsById.get(u.category)?.code ?? "-")})
                 </option>

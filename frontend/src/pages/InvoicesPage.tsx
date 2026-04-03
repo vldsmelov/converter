@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
-import { requestJson } from "../api/request";
+import { requestJson, unwrapList } from "../api/request";
 import PageHeader from "../components/PageHeader";
 
 type InvoiceRow = any;
@@ -14,12 +14,6 @@ function fmtDate(s: string | null | undefined) {
 
 function todayIso() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function parseRows(payload: any): any[] {
-  if (Array.isArray(payload)) return payload;
-  if (payload && Array.isArray(payload.results)) return payload.results;
-  return [];
 }
 
 function invoiceStatusLabel(v: unknown) {
@@ -54,7 +48,7 @@ export default function InvoicesPage() {
         url: `${import.meta.env.VITE_DOCS_BASE_URL}/api/v1/invoices/`,
         token,
       });
-      setRows(parseRows(data));
+      setRows(unwrapList(data));
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
