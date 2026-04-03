@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson } from "../api/request";
@@ -17,7 +17,7 @@ export default function NsiUomsPage() {
     return (id: number) => m.get(id) ?? String(id);
   }, [cats]);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!token) return;
     setErr(null);
     try {
@@ -30,9 +30,11 @@ export default function NsiUomsPage() {
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
-  }
+  }, [token]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   async function remove(id: number) {
     if (!token) return;

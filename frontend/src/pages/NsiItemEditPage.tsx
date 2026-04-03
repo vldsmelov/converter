@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson, unwrapList } from "../api/request";
@@ -31,11 +31,11 @@ export default function NsiItemEditPage() {
   const prevCatId = useRef<number | null>(null);
 
   const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
-  const uomCode = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "—");
+  const uomCode = useCallback((id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-"), [uomById]);
 
   const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
-  const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "—");
-  const catDefaultUom = (id: number | null | undefined) => (id ? (catById.get(id)?.default_uom ?? null) : null);
+  const catName = useCallback((id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "-"), [catById]);
+  const catDefaultUom = useCallback((id: number | null | undefined) => (id ? (catById.get(id)?.default_uom ?? null) : null), [catById]);
   const normalizeName = (value: unknown) => String(value ?? "").trim().toLowerCase();
   const exactNameDuplicate = useMemo(() => {
     const needle = normalizeName(name);
@@ -76,7 +76,7 @@ export default function NsiItemEditPage() {
       .sort((a, b) => a.name.localeCompare(b.name, "ru"));
   }
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!token) return;
     setErr(null);
     try {
@@ -108,8 +108,10 @@ export default function NsiItemEditPage() {
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
-  }
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token, itemId]);
+  }, [token, itemId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   function onCategoryChange(newId: number) {
     const oldId = prevCatId.current;
@@ -139,8 +141,7 @@ export default function NsiItemEditPage() {
       if (defU) setStorageUom(defU);
       else setUseDefaultUom(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useDefaultUom]);
+  }, [useDefaultUom, categoryId, catDefaultUom]);
 
   useEffect(() => {
     if (!allowFractional && roundingPrecision !== 0) {
@@ -149,33 +150,33 @@ export default function NsiItemEditPage() {
   }, [allowFractional, roundingPrecision]);
 
   const sourceLabel = useMemo(() => {
-    if (!categoryId) return "—";
+    if (!categoryId) return "вЂ”";
     const defU = catDefaultUom(categoryId);
-    if (!defU) return "вручную";
-    if (useDefaultUom) return "по умолчанию";
-    return defU === storageUom ? "по умолчанию" : "вручную";
-  }, [categoryId, useDefaultUom, storageUom, cats]);
+    if (!defU) return "РІСЂСѓС‡РЅСѓСЋ";
+    if (useDefaultUom) return "РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ";
+    return defU === storageUom ? "РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ" : "РІСЂСѓС‡РЅСѓСЋ";
+  }, [categoryId, useDefaultUom, storageUom, catDefaultUom]);
 
   const example = useMemo(() => {
-    return `«${name || "…"}» — категория «${catName(categoryId)}», храним в базе: ${uomCode(storageUom)} (${sourceLabel})`;
-  }, [name, categoryId, storageUom, sourceLabel, cats, uoms]);
+    return `В«${name || "вЂ¦"}В» вЂ” РєР°С‚РµРіРѕСЂРёСЏ В«${catName(categoryId)}В», С…СЂР°РЅРёРј РІ Р±Р°Р·Рµ: ${uomCode(storageUom)} (${sourceLabel})`;
+  }, [name, categoryId, storageUom, sourceLabel, catName, uomCode]);
 
   async function save() {
     if (!token) return;
-    if (!categoryId) { setErr("Выберите категорию."); return; }
-    if (!storageUom) { setErr("Выберите единицу хранения."); return; }
+    if (!categoryId) { setErr("Р’С‹Р±РµСЂРёС‚Рµ РєР°С‚РµРіРѕСЂРёСЋ."); return; }
+    if (!storageUom) { setErr("Р’С‹Р±РµСЂРёС‚Рµ РµРґРёРЅРёС†Сѓ С…СЂР°РЅРµРЅРёСЏ."); return; }
     const densityText = String(densityKgPerL ?? "").replace(",", ".").trim();
     let densityValue: number | null = null;
     if (densityText) {
       const parsed = Number(densityText);
       if (!Number.isFinite(parsed) || parsed <= 0) {
-        setErr("Плотность должна быть числом больше 0.");
+        setErr("РџР»РѕС‚РЅРѕСЃС‚СЊ РґРѕР»Р¶РЅР° Р±С‹С‚СЊ С‡РёСЃР»РѕРј Р±РѕР»СЊС€Рµ 0.");
         return;
       }
       densityValue = parsed;
     }
     if (exactNameDuplicate) {
-      setErr("Номенклатура с таким названием уже существует. Выберите существующую позицию или укажите другое имя.");
+      setErr("РќРѕРјРµРЅРєР»Р°С‚СѓСЂР° СЃ С‚Р°РєРёРј РЅР°Р·РІР°РЅРёРµРј СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓРµС‚. Р’С‹Р±РµСЂРёС‚Рµ СЃСѓС‰РµСЃС‚РІСѓСЋС‰СѓСЋ РїРѕР·РёС†РёСЋ РёР»Рё СѓРєР°Р¶РёС‚Рµ РґСЂСѓРіРѕРµ РёРјСЏ.");
       return;
     }
     setErr(null);
@@ -207,7 +208,7 @@ export default function NsiItemEditPage() {
 
   async function remove() {
     if (!token) return;
-    if (!confirm("Удалить номенклатурную позицию?")) return;
+    if (!confirm("РЈРґР°Р»РёС‚СЊ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂРЅСѓСЋ РїРѕР·РёС†РёСЋ?")) return;
     setErr(null);
     try {
       await requestJson({ method: "DELETE", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/${itemId}/`, token });
@@ -223,17 +224,17 @@ export default function NsiItemEditPage() {
     <div className="card">
       <PageHeader
         title={`Редактирование позиции #${itemId}`}
-        subtitle="Единица хранения — в какой единице мы храним количество в базе. Если поставщик поставляет в других единицах — это решается правилами конвертации."
-        right={<button className="btn" onClick={() => nav("/nsi/items")}>← Назад</button>}
+        subtitle="Р•РґРёРЅРёС†Р° С…СЂР°РЅРµРЅРёСЏ вЂ” РІ РєР°РєРѕР№ РµРґРёРЅРёС†Рµ РјС‹ С…СЂР°РЅРёРј РєРѕР»РёС‡РµСЃС‚РІРѕ РІ Р±Р°Р·Рµ. Р•СЃР»Рё РїРѕСЃС‚Р°РІС‰РёРє РїРѕСЃС‚Р°РІР»СЏРµС‚ РІ РґСЂСѓРіРёС… РµРґРёРЅРёС†Р°С… вЂ” СЌС‚Рѕ СЂРµС€Р°РµС‚СЃСЏ РїСЂР°РІРёР»Р°РјРё РєРѕРЅРІРµСЂС‚Р°С†РёРё."
+        right={<button className="btn" onClick={() => nav("/nsi/items")}>в†ђ РќР°Р·Р°Рґ</button>}
       />
 
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
-      {!item ? <div style={{ padding: 8 }}>Загрузка…</div> : null}
+      {!item ? <div style={{ padding: 8 }}>Р—Р°РіСЂСѓР·РєР°вЂ¦</div> : null}
 
       <div className="card nsi-item-form" style={{ marginTop: 12 }}>
         <div className="nsi-item-row-one">
           <label className="field">
-            <small>Название номенклатуры</small>
+            <small>РќР°Р·РІР°РЅРёРµ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹</small>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -243,13 +244,13 @@ export default function NsiItemEditPage() {
             <datalist id="item-edit-name-suggestions">
               {nameSuggestions.map((s) => <option key={s} value={s} />)}
             </datalist>
-            {exactNameDuplicate && <small style={{ color: "#fca5a5" }}>Такое название уже есть в справочнике.</small>}
+            {exactNameDuplicate && <small style={{ color: "#fca5a5" }}>РўР°РєРѕРµ РЅР°Р·РІР°РЅРёРµ СѓР¶Рµ РµСЃС‚СЊ РІ СЃРїСЂР°РІРѕС‡РЅРёРєРµ.</small>}
           </label>
         </div>
 
         <div className="nsi-item-row-two">
           <label className="field">
-            <small>Категория</small>
+            <small>РљР°С‚РµРіРѕСЂРёСЏ</small>
             <select value={categoryId ?? ""} onChange={(e) => onCategoryChange(toNum(e.target.value))}>
               {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
@@ -264,12 +265,12 @@ export default function NsiItemEditPage() {
                 disabled={!defUom}
                 onChange={(e) => setUseDefaultUom(e.target.checked)}
               />
-              <span>Использовать ЕИ по умолчанию категории</span>
+              <span>РСЃРїРѕР»СЊР·РѕРІР°С‚СЊ Р•Р РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ РєР°С‚РµРіРѕСЂРёРё</span>
             </span>
           </label>
 
           <label className="field">
-            <small>Единица хранения (в базе)</small>
+            <small>Р•РґРёРЅРёС†Р° С…СЂР°РЅРµРЅРёСЏ (РІ Р±Р°Р·Рµ)</small>
             <select
               value={storageUom ?? ""}
               onChange={(e) => setStorageUom(toNum(e.target.value))}
@@ -280,14 +281,14 @@ export default function NsiItemEditPage() {
           </label>
 
           <label className="field">
-            <small>Плотность, кг/л (опционально)</small>
+            <small>РџР»РѕС‚РЅРѕСЃС‚СЊ, РєРі/Р» (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small>
             <input
               type="number"
               min={0}
               step="0.000001"
               value={densityKgPerL}
               onChange={(e) => setDensityKgPerL(e.target.value)}
-              placeholder="например, 1.45"
+              placeholder="РЅР°РїСЂРёРјРµСЂ, 1.45"
             />
           </label>
         </div>
@@ -301,12 +302,12 @@ export default function NsiItemEditPage() {
                 checked={allowFractional}
                 onChange={(e) => setAllowFractional(e.target.checked)}
               />
-              <span>Использовать дробные числа</span>
+              <span>РСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РґСЂРѕР±РЅС‹Рµ С‡РёСЃР»Р°</span>
             </span>
           </label>
 
           <label className="field">
-            <small>Округление</small>
+            <small>РћРєСЂСѓРіР»РµРЅРёРµ</small>
             <input
               type="number"
               min={0}
@@ -323,23 +324,27 @@ export default function NsiItemEditPage() {
             <small>&nbsp;</small>
             <span className="nsi-item-toggle">
               <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-              <span>Активен</span>
+              <span>РђРєС‚РёРІРµРЅ</span>
             </span>
           </label>
         </div>
 
         <div style={{ marginTop: 10 }}>
-          <small>Пример:</small><br />
+          <small>РџСЂРёРјРµСЂ:</small><br />
           <span className="badge">{example}</span>
         </div>
 
         <div className="row nsi-item-actions" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={() => nav("/nsi/items")}>Отмена</button>
-          <button className="btn primary" onClick={save} disabled={exactNameDuplicate}>Сохранить</button>
+          <button className="btn" onClick={() => nav("/nsi/items")}>РћС‚РјРµРЅР°</button>
+          <button className="btn primary" onClick={save} disabled={exactNameDuplicate}>РЎРѕС…СЂР°РЅРёС‚СЊ</button>
           <div style={{ flex: 1 }} />
-          <button className="btn danger" onClick={remove}>Удалить</button>
+          <button className="btn danger" onClick={remove}>РЈРґР°Р»РёС‚СЊ</button>
         </div>
       </div>
     </div>
   );
 }
+
+
+
+

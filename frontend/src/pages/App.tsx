@@ -28,6 +28,8 @@ import NsiUomsPage from "./NsiUomsPage";
 import PublicFeedbackPage from "./PublicFeedbackPage";
 import QuickCalculatorPage from "./QuickCalculatorPage";
 
+const EMPTY_ROLES: string[] = [];
+
 export default function App() {
   const { keycloak, token } = useAuth();
   const location = useLocation();
@@ -37,7 +39,10 @@ export default function App() {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   });
 
-  const realmRoles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
+  const realmRoles = useMemo(
+    () => (((keycloak.tokenParsed as any)?.realm_access?.roles as string[] | undefined) ?? EMPTY_ROLES),
+    [keycloak.tokenParsed]
+  );
   const isAdmin = useMemo(() => realmRoles.includes("system.admin"), [realmRoles]);
   const canReadFeedback = useMemo(
     () => isAdmin || realmRoles.includes("documents.feedback.read"),

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson, unwrapList } from "../api/request";
@@ -130,10 +130,10 @@ export default function NsiRulesPage() {
   const columnsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
-  const uomCode = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-");
+  const uomCode = useCallback((id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-"), [uomById]);
 
   const itemCatById = useMemo(() => new Map<number, any>(itemCats.map((c: any) => [c.id, c])), [itemCats]);
-  const itemCatName = (id: number | null | undefined) => (id ? (itemCatById.get(id)?.name ?? String(id)) : "-");
+  const itemCatName = useCallback((id: number | null | undefined) => (id ? (itemCatById.get(id)?.name ?? String(id)) : "-"), [itemCatById]);
 
   const itemById = useMemo(() => new Map<number, any>(items.map((i: any) => [i.id, i])), [items]);
   const itemRules = useMemo(() => rules.filter((r: any) => !!r.item), [rules]);
@@ -275,7 +275,7 @@ export default function NsiRulesPage() {
       const s = `${r.id ?? ""} ${uomCode(r.from_uom)} ${uomCode(r.to_uom)} ${r.multiplier ?? ""} ${r.status ?? ""}`.toLowerCase();
       return s.includes(qq);
     });
-  }, [globalRules, qGlobal, uomById]);
+  }, [globalRules, qGlobal, uomCode]);
 
   const filteredCategory = useMemo(() => {
     const qq = qCategory.trim().toLowerCase();
@@ -285,7 +285,7 @@ export default function NsiRulesPage() {
       const s = `${p.id ?? ""} ${itemCatName(p.category)} ${ruleText} ${p.status ?? ""}`.toLowerCase();
       return s.includes(qq);
     });
-  }, [catPkgs, qCategory, itemCatById, uomById]);
+  }, [catPkgs, qCategory, itemCatName, uomCode]);
 
   const filteredItem = useMemo(() => {
     const qq = qItem.trim().toLowerCase();

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson, unwrapList } from "../api/request";
@@ -41,6 +41,9 @@ function invoiceStatusLabel(v: unknown) {
   return s || "-";
 }
 
+const EMPTY_LINES: DocsInvoiceLineDto[] = [];
+const EMPTY_FILES: DocsInvoiceFileDto[] = [];
+
 export default function InvoiceDetailPage() {
   const { id } = useParams();
   const invId = Number(id);
@@ -53,8 +56,8 @@ export default function InvoiceDetailPage() {
   const [busy, setBusy] = useState<"" | "calculate" | "generate">("");
 
   const itemById = useMemo(() => new Map<number, NsiItemDto>(items.map((i) => [i.id, i])), [items]);
-  const lines = inv?.lines ?? [];
-  const files = inv?.files ?? [];
+  const lines = inv?.lines ?? EMPTY_LINES;
+  const files = inv?.files ?? EMPTY_FILES;
 
   const summary = useMemo(() => {
     const data = lines.reduce(
@@ -72,7 +75,7 @@ export default function InvoiceDetailPage() {
     return data;
   }, [lines]);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!token) return;
     setErr(null);
     try {
@@ -85,17 +88,20 @@ export default function InvoiceDetailPage() {
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
-  }
+  }, [token, invId]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token, invId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   useEffect(() => {
     const s = String(inv?.status ?? "");
     if (s !== "calculating" && s !== "generating") return;
-    const t = setInterval(() => load(), 1000);
+    const t = setInterval(() => {
+      void load();
+    }, 1000);
     return () => clearInterval(t);
-    // eslint-disable-next-line
-  }, [inv?.status]);
+  }, [inv?.status, load]);
 
   async function calculate() {
     if (!token) return;

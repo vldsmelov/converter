@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { ApiError, requestJson } from "../api/request";
@@ -32,7 +32,7 @@ export default function NsiUomCreatePage() {
     return (id: number | null) => (id ? (m.get(id) ?? String(id)) : "—");
   }, [cats]);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!token) return;
     setErr(null);
     try {
@@ -43,9 +43,11 @@ export default function NsiUomCreatePage() {
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
-  }
+  }, [token, category]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const example = useMemo(() => {
     return `1 ${code.toUpperCase()} = ${factor} (в базовых единицах категории ${catCode(category)})`;

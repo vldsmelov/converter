@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson } from "../api/request";
@@ -21,7 +21,7 @@ export default function NsiUomEditPage() {
   const [factor, setFactor] = useState("1");
   const [precision, setPrecision] = useState(3);
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!token) return;
     setErr(null);
     try {
@@ -39,9 +39,11 @@ export default function NsiUomEditPage() {
     } catch (e: any) {
       setErr(e?.message ?? String(e));
     }
-  }
+  }, [token, uomId]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [token, uomId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const catCode = useMemo(() => {
     const m = new Map<number, string>(cats.map((c: any) => [c.id, c.code]));

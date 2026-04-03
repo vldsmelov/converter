@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { ApiError, requestJson, unwrapList } from "../api/request";
@@ -119,12 +119,12 @@ export default function CreateInvoicePage() {
   });
 
   const catById = useMemo(() => new Map<number, NsiItemCategoryDto>(cats.map((c) => [c.id, c])), [cats]);
-  const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "-");
+  const catName = useCallback((id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "-"), [catById]);
 
   const uomById = useMemo(() => new Map<number, NsiUomDto>(uoms.map((u) => [u.id, u])), [uoms]);
   const uomByCode = useMemo(() => new Map<string, NsiUomDto>(uoms.map((u) => [up(u.code), u])), [uoms]);
   const uomCatCodeById = useMemo(() => new Map<number, string>(uomCats.map((c) => [c.id, up(c.code)])), [uomCats]);
-  const uomCodeById = (id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-");
+  const uomCodeById = useCallback((id: number | null | undefined) => (id ? (uomById.get(id)?.code ?? String(id)) : "-"), [uomById]);
   const uomOptions = useMemo(
     () => (uoms ?? []).map((u) => ({ code: up(u.code), label: `${String(u.name ?? u.code)} (${up(u.code)})` })),
     [uoms]
@@ -176,13 +176,13 @@ export default function CreateInvoicePage() {
     return up(inCategory[0].code);
   }
 
-  function itemPostingUomCode(it: NsiItemDto | null | undefined): string | null {
+  const itemPostingUomCode = useCallback((it: NsiItemDto | null | undefined): string | null => {
     const id = it?.policy?.posting_uom;
     if (typeof id === "number") return uomCodeById(id);
     return null;
-  }
+  }, [uomCodeById]);
 
-  function supplierOptionsForItem(itemId: number | null): string[] {
+  const supplierOptionsForItem = useCallback((itemId: number | null): string[] => {
     const bag = new Set<string>();
     if (!itemId) return [];
 
@@ -216,7 +216,7 @@ export default function CreateInvoicePage() {
       .filter(Boolean);
 
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, "ru"));
-  }
+  }, [itemRuleSuppliers, items, counterpartyNames]);
 
   async function loadRefs() {
     if (!token) return;
@@ -527,11 +527,11 @@ export default function CreateInvoicePage() {
     const cat = it?.category ? catName(it.category) : "-";
     const posting = itemPostingUomCode(it) ?? "-";
     return { name, cat, posting };
-  }, [lines, items, cats]);
+  }, [lines, items, catName, itemPostingUomCode]);
 
   const editorSupplierOptions = useMemo(
     () => supplierOptionsForItem(editor.item_id),
-    [editor.item_id, itemRuleSuppliers, items, counterpartyNames]
+    [editor.item_id, supplierOptionsForItem]
   );
 
   async function create() {

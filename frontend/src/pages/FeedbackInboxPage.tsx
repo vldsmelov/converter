@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { requestJson } from "../api/request";
 import { useAuth } from "../auth/AuthProvider";
 import PageHeader from "../components/PageHeader";
@@ -37,9 +37,14 @@ function feedbackStatusLabel(v: FeedbackRow["status"]) {
   return v;
 }
 
+const EMPTY_ROLES: string[] = [];
+
 export default function FeedbackInboxPage() {
   const { token, keycloak } = useAuth();
-  const realmRoles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
+  const realmRoles = useMemo(
+    () => (((keycloak.tokenParsed as any)?.realm_access?.roles as string[] | undefined) ?? EMPTY_ROLES),
+    [keycloak.tokenParsed]
+  );
   const canRead = useMemo(
     () => realmRoles.includes("system.admin") || realmRoles.includes("documents.feedback.read"),
     [realmRoles]
@@ -57,7 +62,7 @@ export default function FeedbackInboxPage() {
   const [statusDraft, setStatusDraft] = useState<Record<number, FeedbackRow["status"]>>({});
   const [noteDraft, setNoteDraft] = useState<Record<number, string>>({});
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!token || !canRead) return;
     setLoading(true);
     setErr(null);
@@ -75,12 +80,11 @@ export default function FeedbackInboxPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [token, canRead]);
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, canRead]);
+    void load();
+  }, [load]);
 
   async function saveRow(row: FeedbackRow) {
     if (!token || !canWrite) return;
