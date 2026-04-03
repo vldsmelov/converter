@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { ApiError, requestJson } from "../api/request";
 import ItemLookup from "../components/ItemLookup";
+import TextLookup from "../components/TextLookup";
 import PageHeader from "../components/PageHeader";
 import { ruleParamLabel, ruleTypeLabel, uomCategoryLabel } from "../lib/ruLabels";
 
@@ -16,13 +17,9 @@ type Line = {
   item_id: number | null;
   qty: string;
   uom_code: string;
-  barcode: string;
+  to_uom_code: string;
   supplier_code: string;
   note: string;
-  custom_field_code: string;
-  custom_field_label: string;
-  custom_field_value: string;
-  make_default_field: boolean;
 };
 
 type LineDraft = Omit<Line, "key">;
@@ -85,14 +82,13 @@ function parseConvertError(error: unknown): ParsedConvertError | null {
 }
 
 export default function CreateInvoicePage() {
-  const { token, keycloak } = useAuth();
+  const { token } = useAuth();
   const nav = useNavigate();
 
   const [items, setItems] = useState<Item[]>([]);
   const [uoms, setUoms] = useState<Uom[]>([]);
   const [uomCats, setUomCats] = useState<UomCat[]>([]);
   const [cats, setCats] = useState<Cat[]>([]);
-  const [defaultFields, setDefaultFields] = useState<any[]>([]);
   const [counterparties, setCounterparties] = useState<any[]>([]);
   const [itemRuleSuppliers, setItemRuleSuppliers] = useState<Record<number, string[]>>({});
   const [err, setErr] = useState<string | null>(null);
@@ -111,21 +107,10 @@ export default function CreateInvoicePage() {
     item_id: null,
     qty: "1",
     uom_code: "KG",
-    barcode: "",
+    to_uom_code: "KG",
     supplier_code: "",
     note: "",
-    custom_field_code: "",
-    custom_field_label: "",
-    custom_field_value: "",
-    make_default_field: false,
   });
-
-  const realmRoles: string[] = ((keycloak.tokenParsed as any)?.realm_access?.roles ?? []) as string[];
-  const canCreateDefaultField = realmRoles.includes("nsi.default_field.write") || realmRoles.includes("system.admin");
-  const defaultFieldCodes = useMemo(
-    () => new Set((defaultFields ?? []).map((f: any) => String(f.code ?? "").trim()).filter(Boolean)),
-    [defaultFields]
-  );
 
   const catById = useMemo(() => new Map<number, any>(cats.map((c: any) => [c.id, c])), [cats]);
   const catName = (id: number | null | undefined) => (id ? (catById.get(id)?.name ?? String(id)) : "-");
@@ -238,12 +223,11 @@ export default function CreateInvoicePage() {
     setErr(null);
 
     try {
-      const [itRaw, uRaw, ucRaw, cRaw, dfRaw, cpRaw, rulesRaw] = await Promise.all([
+      const [itRaw, uRaw, ucRaw, cRaw, cpRaw, rulesRaw] = await Promise.all([
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uoms/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/uom-categories/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/item-categories/`, token }),
-        requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`, token }),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/counterparties/?active=1`, token }).catch(() => []),
         requestJson<any[]>({ method: "GET", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/rules/?status=active`, token }).catch(() => []),
       ]);
@@ -252,7 +236,6 @@ export default function CreateInvoicePage() {
       const u = parseRows(uRaw);
       const uc = parseRows(ucRaw);
       const c = parseRows(cRaw);
-      const df = parseRows(dfRaw);
       const cps = parseRows(cpRaw);
       const rules = parseRows(rulesRaw);
 
@@ -274,7 +257,6 @@ export default function CreateInvoicePage() {
       setUoms(u ?? []);
       setUomCats(uc ?? []);
       setCats(c ?? []);
-      setDefaultFields(df ?? []);
       setCounterparties(cps ?? []);
       setItemRuleSuppliers(suppliersMap);
     } catch (e: any) {
@@ -302,13 +284,9 @@ export default function CreateInvoicePage() {
       item_id: null,
       qty: "1",
       uom_code: "KG",
-      barcode: "",
+      to_uom_code: "KG",
       supplier_code: "",
       note: "",
-      custom_field_code: "",
-      custom_field_label: "",
-      custom_field_value: "",
-      make_default_field: false,
     });
     setEditorOpen(true);
   }
@@ -321,13 +299,9 @@ export default function CreateInvoicePage() {
       item_id: l.item_id,
       qty: l.qty,
       uom_code: l.uom_code,
-      barcode: l.barcode ?? "",
+      to_uom_code: l.to_uom_code ?? "",
       supplier_code: l.supplier_code ?? "",
       note: l.note ?? "",
-      custom_field_code: l.custom_field_code ?? "",
-      custom_field_label: l.custom_field_label ?? "",
-      custom_field_value: l.custom_field_value ?? "",
-      make_default_field: false,
     });
     setEditorOpen(true);
   }
@@ -340,56 +314,9 @@ export default function CreateInvoicePage() {
       ...prev,
       item_id: itemId,
       uom_code: prev.uom_code === "KG" && posting ? posting : prev.uom_code,
+      to_uom_code: posting ? posting : prev.to_uom_code,
       supplier_code: supplierOptions.some((x) => x === prev.supplier_code) ? prev.supplier_code : "",
     }));
-  }
-
-  async function ensureDefaultFieldForEditor(current: LineDraft) {
-    if (!token || !canCreateDefaultField || !current.make_default_field) return;
-
-    const code = (current.custom_field_code ?? "").trim();
-    if (!code) {
-      throw new Error("Для поля по умолчанию укажите код доп. поля.");
-    }
-    if (defaultFieldCodes.has(code)) return;
-
-    try {
-      await requestJson<any>({
-        method: "POST",
-        url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`,
-        token,
-        body: {
-          code,
-          label: (current.custom_field_label ?? "").trim() || code,
-          field_type: "string",
-          default_value: (current.custom_field_value ?? "").trim(),
-          required: false,
-        },
-      });
-      setDefaultFields((prev) => [
-        ...prev,
-        {
-          code,
-          label: (current.custom_field_label ?? "").trim() || code,
-          field_type: "string",
-          default_value: (current.custom_field_value ?? "").trim(),
-          required: false,
-          is_system: true,
-        },
-      ]);
-    } catch (e: any) {
-      if (e instanceof ApiError && (e.status === 400 || e.status === 409)) {
-        const refreshed = await requestJson<any[]>({
-          method: "GET",
-          url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/default-fields/`,
-          token,
-        });
-        setDefaultFields(refreshed ?? []);
-        const exists = (refreshed ?? []).some((f: any) => String(f.code ?? "").trim() === code);
-        if (exists) return;
-      }
-      throw e;
-    }
   }
 
   async function saveEditorLine() {
@@ -401,18 +328,11 @@ export default function CreateInvoicePage() {
       setErr("Количество должно быть больше 0.");
       return;
     }
-    if ((editor.custom_field_value ?? "").trim() && !(editor.custom_field_code ?? "").trim()) {
-      setErr("Для доп. поля укажите код.");
+    if (!editor.to_uom_code) {
+      setErr("\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0438\u0442\u043e\u0433\u043e\u0432\u0443\u044e \u0415\u0418 \u0434\u043b\u044f \u0441\u0442\u0440\u043e\u043a\u0438.");
       return;
     }
     setErr(null);
-
-    try {
-      await ensureDefaultFieldForEditor(editor);
-    } catch (e: any) {
-      setErr(e?.message ?? String(e));
-      return;
-    }
 
     if (editorIndex === null) {
       setLines((prev) => [...prev, { key: uid(), ...editor }]);
@@ -469,17 +389,18 @@ export default function CreateInvoicePage() {
 
   async function checkLine(line: Line) {
     if (!token) return;
-    if (!line.item_id || !line.uom_code) return;
+    if (!line.item_id || !line.uom_code || !line.to_uom_code) return;
 
     const it = items.find((x: any) => x.id === line.item_id);
     const posting = itemPostingUomCode(it);
+    const targetUom = up(line.to_uom_code || posting || "");
 
-    if (posting && up(posting) === up(line.uom_code)) {
+    if (targetUom && targetUom === up(line.uom_code)) {
       setChecks((m) => ({
         ...m,
         [line.key]: {
           state: "ok",
-          message: `Успешно: ЕИ совпадает с хранением (${up(posting)})`,
+          message: `\u0423\u0441\u043f\u0435\u0448\u043d\u043e: \u0415\u0418 \u0438\u0441\u0442\u043e\u0447\u043d\u0438\u043a\u0430 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u0435\u0442 \u0441 \u0438\u0442\u043e\u0433\u043e\u0432\u043e\u0439 (${targetUom})`,
         },
       }));
       return;
@@ -489,9 +410,7 @@ export default function CreateInvoicePage() {
 
     try {
       const requestContext: Record<string, unknown> = {};
-      const barcode = line.barcode || undefined;
       const supplierCode = line.supplier_code || undefined;
-      if (barcode) requestContext.barcode = barcode;
       if (supplierCode) requestContext.supplier_code = supplierCode;
       const res = await requestJson<any>({
         method: "POST",
@@ -501,35 +420,36 @@ export default function CreateInvoicePage() {
           item_id: line.item_id,
           qty: "1",
           from_uom: line.uom_code,
+          to_uom: targetUom || undefined,
           context: requestContext,
-          barcode,
           supplier_code: supplierCode,
         },
       });
 
       const resultUom = up(res?.to?.uom ?? res?.posting_uom_code);
       const resultQty = String(res?.to?.qty ?? res?.posting_qty ?? "");
-      const ok = posting ? resultUom === up(posting) : true;
+      const expectedUom = targetUom || up(posting ?? "");
+      const ok = expectedUom ? resultUom === expectedUom : true;
 
       setChecks((m) => ({
         ...m,
         [line.key]: {
           state: ok ? "ok" : "mismatch",
           message: ok
-            ? `Успешно: 1 ${up(line.uom_code)} -> ${resultQty} ${resultUom}`
-            : `Есть конвертация, но итоговая ЕИ (${resultUom}) не совпадает с оприходованием (${up(posting)}).`,
+            ? `\u0423\u0441\u043f\u0435\u0448\u043d\u043e: 1 ${up(line.uom_code)} -> ${resultQty} ${resultUom}`
+            : `\u0415\u0441\u0442\u044c \u043a\u043e\u043d\u0432\u0435\u0440\u0442\u0430\u0446\u0438\u044f, \u043d\u043e \u0438\u0442\u043e\u0433\u043e\u0432\u0430\u044f \u0415\u0418 (${resultUom}) \u043d\u0435 \u0441\u043e\u0432\u043f\u0430\u0434\u0430\u0435\u0442 \u0441 \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0439 (${expectedUom}).`,
           suggestedUrl: ok
             ? undefined
             : (it
-              ? suggestRuleUrl({ item: it, fromCode: line.uom_code, toCode: posting })
+              ? suggestRuleUrl({ item: it, fromCode: line.uom_code, toCode: expectedUom })
               : undefined),
         },
       }));
     } catch (e: any) {
       const parsed = parseConvertError(e);
 
-      let message = "Нет подходящего правила для перевода. Нужно создать правило.";
-      let suggestedUrl = it ? suggestRuleUrl({ item: it, fromCode: line.uom_code, toCode: posting }) : undefined;
+      let message = "\u041d\u0435\u0442 \u043f\u043e\u0434\u0445\u043e\u0434\u044f\u0449\u0435\u0433\u043e \u043f\u0440\u0430\u0432\u0438\u043b\u0430 \u0434\u043b\u044f \u043f\u0435\u0440\u0435\u0432\u043e\u0434\u0430. \u041d\u0443\u0436\u043d\u043e \u0441\u043e\u0437\u0434\u0430\u0442\u044c \u043f\u0440\u0430\u0432\u0438\u043b\u043e.";
+      let suggestedUrl = it ? suggestRuleUrl({ item: it, fromCode: line.uom_code, toCode: targetUom || posting }) : undefined;
 
       if (parsed) {
         const steps = parsed.suggestedSteps;
@@ -537,7 +457,7 @@ export default function CreateInvoicePage() {
         if (steps.length > 0) {
           const first = steps[0];
           const fromCodeForStep = pickUomCodeForCategory(first.from_category) ?? up(line.uom_code);
-          const toCodeForStep = pickUomCodeForCategory(first.to_category) ?? up(posting ?? "KG");
+          const toCodeForStep = pickUomCodeForCategory(first.to_category) ?? up(targetUom || posting || "KG");
 
           if (it) {
             suggestedUrl = suggestRuleUrl({
@@ -578,7 +498,7 @@ export default function CreateInvoicePage() {
   }
 
   const signature = useMemo(
-    () => lines.map((l) => `${l.key}:${l.item_id ?? ""}:${l.uom_code}:${l.barcode}:${l.supplier_code}`).join("|"),
+    () => lines.map((l) => `${l.key}:${l.item_id ?? ""}:${l.uom_code}:${l.to_uom_code}:${l.supplier_code}`).join("|"),
     [lines]
   );
 
@@ -589,7 +509,7 @@ export default function CreateInvoicePage() {
     (async () => {
       for (const l of lines) {
         if (cancelled) return;
-        if (!l.item_id || !l.uom_code) continue;
+        if (!l.item_id || !l.uom_code || !l.to_uom_code) continue;
         await checkLine(l);
       }
     })();
@@ -642,23 +562,18 @@ export default function CreateInvoicePage() {
         if ((l.note ?? "").trim()) {
           context.note = (l.note ?? "").trim();
         }
-        const customCode = (l.custom_field_code ?? "").trim();
-        const customValue = (l.custom_field_value ?? "").trim();
-        if (customCode && customValue) {
-          context[customCode] = customValue;
-        }
 
         return {
           line_no: idx + 1,
           item_id: l.item_id,
           qty: l.qty,
           uom_code: l.uom_code,
+          to_uom_code: l.to_uom_code,
           context,
-          barcode: l.barcode ?? "",
           supplier_code: l.supplier_code ?? "",
         };
       })
-      .filter((l) => !!l.item_id && !!l.qty && !!l.uom_code);
+      .filter((l) => !!l.item_id && !!l.qty && !!l.uom_code && !!l.to_uom_code);
 
     if (cleanLines.length === 0) {
       setErr("Добавьте хотя бы одну строку с товаром и количеством.");
@@ -724,8 +639,8 @@ export default function CreateInvoicePage() {
                 <th>#</th>
                 <th>Номенклатура</th>
                 <th>Кол-во</th>
-                <th>ЕИ</th>
-                <th>Штрихкод</th>
+                <th>Входящая ЕИ</th>
+                <th>Итоговая ЕИ</th>
                 <th>Вариант перевода</th>
                 <th>Проверка</th>
                 <th></th>
@@ -746,7 +661,7 @@ export default function CreateInvoicePage() {
                     </td>
                     <td className="num">{l.qty}</td>
                     <td>{uomLabelByCode(l.uom_code)}</td>
-                    <td>{l.barcode || "-"}</td>
+                    <td>{uomLabelByCode(l.to_uom_code)}</td>
                     <td>{l.supplier_code || "-"}</td>
                     <td>
                       {!ch || ch.state === "checking" || ch.state === "idle" ? (
@@ -834,64 +749,27 @@ export default function CreateInvoicePage() {
               </label>
 
               <label className="field">
-                <small>Штрихкод</small>
-                <input value={editor.barcode} onChange={(e) => setEditor((v) => ({ ...v, barcode: e.target.value }))} />
+                <small>Итоговая ЕИ</small>
+                <select value={editor.to_uom_code} onChange={(e) => setEditor((v) => ({ ...v, to_uom_code: up(e.target.value) }))}>
+                  {uomOptions.map((u) => <option key={`to-${u.code}`} value={u.code}>{u.label}</option>)}
+                </select>
               </label>
 
               <label className="field">
                 <small>Вариант перевода (контрагент)</small>
-                <input
-                  list="invoice-editor-supplier-options"
+                <TextLookup
                   value={editor.supplier_code}
-                  onChange={(e) => setEditor((v) => ({ ...v, supplier_code: e.target.value }))}
+                  onChange={(value) => setEditor((v) => ({ ...v, supplier_code: value }))}
+                  options={editorSupplierOptions}
                   placeholder="по умолчанию"
+                  emptyText="Контрагенты не найдены"
                 />
-                <datalist id="invoice-editor-supplier-options">
-                  {editorSupplierOptions.map((name) => <option key={name} value={name} />)}
-                </datalist>
               </label>
 
               <label className="field" style={{ gridColumn: "1 / -1" }}>
                 <small>Комментарий (доп. реквизит)</small>
                 <input value={editor.note} onChange={(e) => setEditor((v) => ({ ...v, note: e.target.value }))} />
               </label>
-
-              <label className="field">
-                <small>Код доп. поля</small>
-                <input
-                  value={editor.custom_field_code}
-                  onChange={(e) => setEditor((v) => ({ ...v, custom_field_code: e.target.value }))}
-                  placeholder="project_code"
-                />
-              </label>
-
-              <label className="field">
-                <small>Название доп. поля</small>
-                <input
-                  value={editor.custom_field_label}
-                  onChange={(e) => setEditor((v) => ({ ...v, custom_field_label: e.target.value }))}
-                  placeholder="Код проекта"
-                />
-              </label>
-
-              <label className="field" style={{ gridColumn: "1 / -1" }}>
-                <small>Значение доп. поля</small>
-                <input
-                  value={editor.custom_field_value}
-                  onChange={(e) => setEditor((v) => ({ ...v, custom_field_value: e.target.value }))}
-                />
-              </label>
-
-              {canCreateDefaultField && (
-                <label className="row" style={{ gridColumn: "1 / -1", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={editor.make_default_field}
-                    onChange={(e) => setEditor((v) => ({ ...v, make_default_field: e.target.checked }))}
-                  />
-                  <small>поле по умолчанию</small>
-                </label>
-              )}
             </div>
 
             <div className="row" style={{ marginTop: 14, justifyContent: "flex-end" }}>

@@ -67,6 +67,7 @@ def calculate_invoice(self, invoice_id: int):
                     "item_id": line.item_id,
                     "qty": str(line.qty),
                     "from_uom": line.uom_code,
+                    "to_uom": line.to_uom_code or None,
                     "context": line.context or {},
                     "barcode": line.barcode or None,
                     "supplier_code": line.supplier_code or None,

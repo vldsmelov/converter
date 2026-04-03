@@ -312,12 +312,16 @@ def pick_package(
             if supplier_code:
                 continue
 
-        if requested_supplier and supplier_code and supplier_code_fold == requested_supplier_fold:
-            candidates_exact_supplier.append(p)
+        if requested_supplier:
+            # If supplier is explicitly selected, only an exact supplier package can be used.
+            # This prevents silent fallback to generic package and allows supplier-specific
+            # conversion rules to take effect when package override is not defined.
+            if supplier_code and supplier_code_fold == requested_supplier_fold:
+                candidates_exact_supplier.append(p)
         else:
             candidates_generic.append(p)
 
-    candidates = candidates_exact_supplier if candidates_exact_supplier else candidates_generic
+    candidates = candidates_exact_supplier if requested_supplier else candidates_generic
 
     if not candidates:
         if requested_supplier:

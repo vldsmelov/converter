@@ -149,7 +149,7 @@ export default function InvoiceDetailPage() {
 
   const canCalculate = useMemo(() => {
     const s = String(inv?.status ?? "");
-    return s === "new" || s === "failed";
+    return s !== "calculating" && s !== "generating";
   }, [inv?.status]);
 
   const canGenerate = useMemo(() => {
@@ -237,6 +237,8 @@ export default function InvoiceDetailPage() {
                 <th>Номенклатура</th>
                 <th className="num">Кол-во</th>
                 <th>ЕИ</th>
+                <th>Итог. ЕИ</th>
+                <th>Вариант</th>
                 <th className="num">Оприход.</th>
                 <th>ЕИ опр.</th>
                 <th>Статус</th>
@@ -262,6 +264,8 @@ export default function InvoiceDetailPage() {
                     <td className="name-cell">{name}</td>
                     <td className="num">{fmtQty(l.qty, 3)}</td>
                     <td>{l.uom_code}</td>
+                    <td>{l.to_uom_code || "-"}</td>
+                    <td>{String(l.supplier_code ?? "").trim() || "по умолчанию"}</td>
                     <td className="num">{conv ? fmtQty(conv.posting_qty, 6) : "-"}</td>
                     <td>{conv?.posting_uom_code ?? "-"}</td>
                     <td><span className={`badge ${rowStatusClass}`.trim()}>{rowStatusLabel}</span></td>
@@ -269,7 +273,7 @@ export default function InvoiceDetailPage() {
                   </tr>
                 );
               })}
-              {lines.length === 0 && <tr><td colSpan={8} className="empty-row"><small>Строк нет.</small></td></tr>}
+              {lines.length === 0 && <tr><td colSpan={10} className="empty-row"><small>Строк нет.</small></td></tr>}
             </tbody>
           </table>
         </div>

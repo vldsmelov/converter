@@ -39,6 +39,7 @@ class InvoiceLine(models.Model):
     item_id = models.IntegerField()  # ссылка на NSI item (ID, без FK межсервисно)
     qty = models.DecimalField(max_digits=18, decimal_places=6)
     uom_code = models.CharField(max_length=32)  # "BAG", "KG", "TON" и т.п.
+    to_uom_code = models.CharField(max_length=32, blank=True, default="")  # target UOM, optional
 
     context = models.JSONField(default=dict, blank=True)
     barcode = models.CharField(max_length=64, blank=True, default="")

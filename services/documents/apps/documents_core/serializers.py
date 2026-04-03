@@ -17,7 +17,7 @@ class InvoiceLineSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = InvoiceLine
-        fields = ["line_no", "item_id", "qty", "uom_code", "context", "barcode", "supplier_code", "converted"]
+        fields = ["line_no", "item_id", "qty", "uom_code", "to_uom_code", "context", "barcode", "supplier_code", "converted"]
 
 
 class InvoiceFileSerializer(serializers.ModelSerializer):
