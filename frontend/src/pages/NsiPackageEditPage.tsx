@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson } from "../api/request";
@@ -29,10 +29,10 @@ export default function NsiPackageEditPage() {
   const [effectiveTo, setEffectiveTo] = useState<string | null>(null);
 
   const uomCatsById = useMemo(() => new Map<number, any>(uomCats.map((c: any) => [c.id, c])), [uomCats]);
-  const uomCatCode = useCallback((catId: number) => uomCatsById.get(catId)?.code ?? "вЂ—", [uomCatsById]);
+  const uomCatCode = useCallback((catId: number) => uomCatsById.get(catId)?.code ?? "‗", [uomCatsById]);
 
   const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
-  const uomCode = (id: number | null) => (id ? (uomById.get(id)?.code ?? String(id)) : "вЂ”");
+  const uomCode = (id: number | null) => (id ? (uomById.get(id)?.code ?? String(id)) : "—");
 
   const pkgUoms = useMemo(() => uoms.filter((u: any) => uomCatCode(u.category) === "COUNT"), [uoms, uomCatCode]);
   const contentUoms = useMemo(() => uoms.filter((u: any) => uomCatCode(u.category) === "MASS"), [uoms, uomCatCode]);
@@ -40,7 +40,7 @@ export default function NsiPackageEditPage() {
   const load = useCallback(async () => {
     if (!token) return;
     if (!Number.isFinite(packageId)) {
-      setErr("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ ID СѓРїР°РєРѕРІРєРё.");
+      setErr("Некорректный ID упаковки.");
       return;
     }
     setErr(null);
@@ -74,9 +74,9 @@ export default function NsiPackageEditPage() {
 
   async function save() {
     if (!token) return;
-    if (!Number.isFinite(packageId)) { setErr("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ ID СѓРїР°РєРѕРІРєРё."); return; }
-    if (!itemId || !packageUom || !contentUom) { setErr("Р—Р°РїРѕР»РЅРёС‚Рµ РІСЃРµ РїРѕР»СЏ."); return; }
-    if (toNum(qty) <= 0) { setErr("РљРѕР»РёС‡РµСЃС‚РІРѕ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ > 0."); return; }
+    if (!Number.isFinite(packageId)) { setErr("Некорректный ID упаковки."); return; }
+    if (!itemId || !packageUom || !contentUom) { setErr("Заполните все поля."); return; }
+    if (toNum(qty) <= 0) { setErr("Количество должно быть > 0."); return; }
 
     setErr(null);
     try {
@@ -104,8 +104,8 @@ export default function NsiPackageEditPage() {
 
   async function remove() {
     if (!token) return;
-    if (!Number.isFinite(packageId)) { setErr("РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ ID СѓРїР°РєРѕРІРєРё."); return; }
-    if (!confirm("РЈРґР°Р»РёС‚СЊ СѓРїР°РєРѕРІРєСѓ?")) return;
+    if (!Number.isFinite(packageId)) { setErr("Некорректный ID упаковки."); return; }
+    if (!confirm("Удалить упаковку?")) return;
     setErr(null);
     try {
       await requestJson({
@@ -123,56 +123,56 @@ export default function NsiPackageEditPage() {
     <div className="card">
       <PageHeader
         title={`Редактирование упаковки #${packageId}`}
-        subtitle="Р¤Р°СЃРѕРІРєР° РґР»СЏ РєРѕРЅРєСЂРµС‚РЅРѕР№ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹: 1 BAG = 25 KG Рё С‚.Рї."
-        right={<button className="btn" onClick={() => nav("/nsi/packages")}>РћС‚РјРµРЅР°</button>}
+        subtitle="Фасовка для конкретной номенклатуры: 1 BAG = 25 KG и т.п."
+        right={<button className="btn" onClick={() => nav("/nsi/packages")}>Отмена</button>}
       />
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
-      {!loaded ? <div style={{ padding: 8 }}>Р—Р°РіСЂСѓР·РєР°...</div> : null}
+      {!loaded ? <div style={{ padding: 8 }}>Загрузка...</div> : null}
 
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row">
           <label style={{ flex: 1 }}>
-            <small>РќРѕРјРµРЅРєР»Р°С‚СѓСЂР°</small><br />
+            <small>Номенклатура</small><br />
             <ItemLookup token={token} value={itemId} onChange={(item) => setItemId(item?.id ?? null)} />
           </label>
           <label>
-            <small>РЈРїР°РєРѕРІРєР°</small><br />
+            <small>Упаковка</small><br />
             <select value={packageUom ?? ""} onChange={(e) => setPackageUom(toNum(e.target.value))}>
               {pkgUoms.map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
             </select>
           </label>
           <label>
-            <small>РљРѕР»-РІРѕ</small><br />
+            <small>Кол-во</small><br />
             <input value={qty} onChange={(e) => setQty(e.target.value)} />
           </label>
           <label>
-            <small>РЎРѕРґРµСЂР¶РёРјРѕРµ</small><br />
+            <small>Содержимое</small><br />
             <select value={contentUom ?? ""} onChange={(e) => setContentUom(toNum(e.target.value))}>
               {contentUoms.map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
             </select>
           </label>
           <label>
-            <small>РЎС‚Р°С‚СѓСЃ</small><br />
+            <small>Статус</small><br />
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="active">РђРєС‚РёРІРЅС‹Р№</option>
-              <option value="draft">Р§РµСЂРЅРѕРІРёРє</option>
-              <option value="archived">РђСЂС…РёРІ</option>
+              <option value="active">Активный</option>
+              <option value="draft">Черновик</option>
+              <option value="archived">Архив</option>
             </select>
           </label>
           <label>
-            <small>РџРѕСЃС‚Р°РІС‰РёРє (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
+            <small>Поставщик (опционально)</small><br />
             <input
               value={supplierCode}
               onChange={(e) => setSupplierCode(e.target.value)}
-              placeholder="РЅР°РїСЂРёРјРµСЂ: РљРѕРјРїР°РЅРёСЏ Рђ"
+              placeholder="например: Компания А"
             />
           </label>
           <label>
-            <small>РЁС‚СЂРёС…РєРѕРґ (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
+            <small>Штрихкод (опционально)</small><br />
             <input value={barcode} onChange={(e) => setBarcode(e.target.value)} />
           </label>
           <label>
-            <small>Р”РµР№СЃС‚РІСѓРµС‚ СЃ</small><br />
+            <small>Действует с</small><br />
             <input
               type="date"
               value={effectiveFrom ?? ""}
@@ -180,7 +180,7 @@ export default function NsiPackageEditPage() {
             />
           </label>
           <label>
-            <small>Р”РµР№СЃС‚РІСѓРµС‚ РїРѕ</small><br />
+            <small>Действует по</small><br />
             <input
               type="date"
               value={effectiveTo ?? ""}
@@ -190,15 +190,15 @@ export default function NsiPackageEditPage() {
         </div>
 
         <div style={{ marginTop: 10 }}>
-          <small>РџСЂРёРјРµСЂ:</small><br />
+          <small>Пример:</small><br />
           <span className="badge">1 {uomCode(packageUom)} = {qty} {uomCode(contentUom)}</span>
         </div>
 
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={() => nav("/nsi/packages")}>РћС‚РјРµРЅР°</button>
-          <button className="btn primary" onClick={save}>РЎРѕС…СЂР°РЅРёС‚СЊ</button>
+          <button className="btn" onClick={() => nav("/nsi/packages")}>Отмена</button>
+          <button className="btn primary" onClick={save}>Сохранить</button>
           <div style={{ flex: 1 }} />
-          <button className="btn" onClick={remove}>РЈРґР°Р»РёС‚СЊ</button>
+          <button className="btn" onClick={remove}>Удалить</button>
         </div>
       </div>
     </div>

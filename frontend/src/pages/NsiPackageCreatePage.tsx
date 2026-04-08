@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { ApiError, requestJson } from "../api/request";
@@ -31,10 +31,10 @@ export default function NsiPackageCreatePage() {
   const canCreateDefaultField = realmRoles.includes("nsi.default_field.write") || realmRoles.includes("system.admin");
 
   const uomCatsById = useMemo(() => new Map<number, any>(uomCats.map((c: any) => [c.id, c])), [uomCats]);
-  const uomCatCode = useCallback((catId: number) => uomCatsById.get(catId)?.code ?? "вЂ”", [uomCatsById]);
+  const uomCatCode = useCallback((catId: number) => uomCatsById.get(catId)?.code ?? "—", [uomCatsById]);
 
   const uomById = useMemo(() => new Map<number, any>(uoms.map((u: any) => [u.id, u])), [uoms]);
-  const uomCode = (id: number | null) => (id ? (uomById.get(id)?.code ?? String(id)) : "вЂ”");
+  const uomCode = (id: number | null) => (id ? (uomById.get(id)?.code ?? String(id)) : "—");
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -64,7 +64,7 @@ export default function NsiPackageCreatePage() {
     if (!token || !canCreateDefaultField || !makeDefaultField) return;
 
     const fieldCode = defaultFieldCode.trim();
-    if (!fieldCode) throw new Error("РЈРєР°Р¶РёС‚Рµ РєРѕРґ РїРѕР»СЏ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ.");
+    if (!fieldCode) throw new Error("Укажите код поля по умолчанию.");
 
     try {
       await requestJson({
@@ -93,8 +93,8 @@ export default function NsiPackageCreatePage() {
 
   async function create() {
     if (!token) return;
-    if (!itemId || !packageUom || !contentUom) { setErr("Р—Р°РїРѕР»РЅРёС‚Рµ РІСЃРµ РїРѕР»СЏ."); return; }
-    if (toNum(qty) <= 0) { setErr("РљРѕР»РёС‡РµСЃС‚РІРѕ РґРѕР»Р¶РЅРѕ Р±С‹С‚СЊ > 0."); return; }
+    if (!itemId || !packageUom || !contentUom) { setErr("Заполните все поля."); return; }
+    if (toNum(qty) <= 0) { setErr("Количество должно быть > 0."); return; }
 
     setErr(null);
     try {
@@ -124,53 +124,53 @@ export default function NsiPackageCreatePage() {
   return (
     <div className="card">
       <PageHeader
-        title="РЎРѕР·РґР°РЅРёРµ СѓРїР°РєРѕРІРєРё"
-        subtitle="Р¤Р°СЃРѕРІРєР° РґР»СЏ РєРѕРЅРєСЂРµС‚РЅРѕР№ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂС‹: 1 BAG = 25 KG Рё С‚.Рї."
-        right={<button className="btn" onClick={() => nav("/nsi/packages")}>РћС‚РјРµРЅР°</button>}
+        title="Создание упаковки"
+        subtitle="Фасовка для конкретной номенклатуры: 1 BAG = 25 KG и т.п."
+        right={<button className="btn" onClick={() => nav("/nsi/packages")}>Отмена</button>}
       />
       {err && <div style={{ padding: 8, color: "#fca5a5" }}>{err}</div>}
 
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row">
           <label style={{ flex: 1 }}>
-            <small>РќРѕРјРµРЅРєР»Р°С‚СѓСЂР°</small><br />
+            <small>Номенклатура</small><br />
             <ItemLookup token={token} value={itemId} onChange={(item) => setItemId(item?.id ?? null)} />
           </label>
           <label>
-            <small>РЈРїР°РєРѕРІРєР°</small><br />
+            <small>Упаковка</small><br />
             <select value={packageUom ?? ""} onChange={(e) => setPackageUom(toNum(e.target.value))}>
               {pkgUoms.map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
             </select>
           </label>
           <label>
-            <small>РљРѕР»-РІРѕ</small><br />
+            <small>Кол-во</small><br />
             <input value={qty} onChange={(e) => setQty(e.target.value)} />
           </label>
           <label>
-            <small>РЎРѕРґРµСЂР¶РёРјРѕРµ</small><br />
+            <small>Содержимое</small><br />
             <select value={contentUom ?? ""} onChange={(e) => setContentUom(toNum(e.target.value))}>
               {contentUoms.map((u: any) => <option key={u.id} value={u.id}>{u.code}</option>)}
             </select>
           </label>
           <label>
-            <small>РЎС‚Р°С‚СѓСЃ</small><br />
+            <small>Статус</small><br />
             <select value={status} onChange={(e) => setStatus(e.target.value as any)}>
-              <option value="active">РђРєС‚РёРІРЅС‹Р№</option>
-              <option value="draft">Р§РµСЂРЅРѕРІРёРє</option>
+              <option value="active">Активный</option>
+              <option value="draft">Черновик</option>
             </select>
           </label>
           <label>
-            <small>РџРѕСЃС‚Р°РІС‰РёРє (РѕРїС†РёРѕРЅР°Р»СЊРЅРѕ)</small><br />
+            <small>Поставщик (опционально)</small><br />
             <input
               value={supplierCode}
               onChange={(e) => setSupplierCode(e.target.value)}
-              placeholder="РЅР°РїСЂРёРјРµСЂ: РљРѕРјРїР°РЅРёСЏ Рђ"
+              placeholder="например: Компания А"
             />
           </label>
         </div>
 
         <div style={{ marginTop: 10 }}>
-          <small>РџСЂРёРјРµСЂ:</small><br />
+          <small>Пример:</small><br />
           <span className="badge">1 {uomCode(packageUom)} = {qty} {uomCode(contentUom)}</span>
         </div>
 
@@ -178,33 +178,33 @@ export default function NsiPackageCreatePage() {
           <div style={{ marginTop: 12 }}>
             <label className="row" style={{ gap: 8 }}>
               <input type="checkbox" checked={makeDefaultField} onChange={(e) => setMakeDefaultField(e.target.checked)} />
-              <small>РїРѕР»Рµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</small>
+              <small>поле по умолчанию</small>
             </label>
             {makeDefaultField && (
               <div className="row" style={{ marginTop: 8 }}>
                 <label>
-                  <small>РљРѕРґ РїРѕР»СЏ</small><br />
+                  <small>Код поля</small><br />
                   <input value={defaultFieldCode} onChange={(e) => setDefaultFieldCode(e.target.value)} />
                 </label>
                 <label>
-                  <small>РќР°Р·РІР°РЅРёРµ</small><br />
+                  <small>Название</small><br />
                   <input value={defaultFieldLabel} onChange={(e) => setDefaultFieldLabel(e.target.value)} />
                 </label>
                 <label>
-                  <small>РўРёРї</small><br />
+                  <small>Тип</small><br />
                   <select value={defaultFieldType} onChange={(e) => setDefaultFieldType(e.target.value as "string" | "number" | "boolean")}>
-                    <option value="string">РЎС‚СЂРѕРєР°</option>
-                    <option value="number">Р§РёСЃР»Рѕ</option>
-                    <option value="boolean">Р›РѕРіРёС‡РµСЃРєРѕРµ</option>
+                    <option value="string">Строка</option>
+                    <option value="number">Число</option>
+                    <option value="boolean">Логическое</option>
                   </select>
                 </label>
                 <label>
-                  <small>Р—РЅР°С‡РµРЅРёРµ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</small><br />
+                  <small>Значение по умолчанию</small><br />
                   <input value={defaultFieldValue} onChange={(e) => setDefaultFieldValue(e.target.value)} />
                 </label>
                 <label className="row" style={{ gap: 6 }}>
                   <input type="checkbox" checked={defaultFieldRequired} onChange={(e) => setDefaultFieldRequired(e.target.checked)} />
-                  <small>РѕР±СЏР·Р°С‚РµР»СЊРЅРѕРµ</small>
+                  <small>обязательное</small>
                 </label>
               </div>
             )}
@@ -212,8 +212,8 @@ export default function NsiPackageCreatePage() {
         )}
 
         <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn" onClick={() => nav("/nsi/packages")}>РћС‚РјРµРЅР°</button>
-          <button className="btn primary" onClick={create}>РЎРѕР·РґР°С‚СЊ</button>
+          <button className="btn" onClick={() => nav("/nsi/packages")}>Отмена</button>
+          <button className="btn primary" onClick={create}>Создать</button>
         </div>
       </div>
     </div>

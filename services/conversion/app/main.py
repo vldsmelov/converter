@@ -182,7 +182,7 @@ async def nsi_post(client: httpx.AsyncClient, token: str, path: str, payload: di
     return r.json()
 
 def _unwrap_list(payload: Any) -> List[dict]:
-    # DRF РјРѕР¶РµС‚ РІРµСЂРЅСѓС‚СЊ СЃРїРёСЃРѕРє РёР»Рё РїР°РіРёРЅРёСЂРѕРІР°РЅРЅС‹Р№ РѕР±СЉРµРєС‚ {"results":[...]}
+    # DRF может вернуть список или пагинированный объект {"results":[...]}
     if isinstance(payload, list):
         return payload
     if isinstance(payload, dict) and "results" in payload and isinstance(payload["results"], list):
@@ -199,7 +199,7 @@ class ConvertRequest(BaseModel):
     context: Dict[str, Any] = Field(default_factory=dict)
     on_date: Optional[date] = None
 
-    # РїРѕРґСЃРєР°Р·РєРё РґР»СЏ РІС‹Р±РѕСЂР° С„Р°СЃРѕРІРєРё (РµСЃР»Рё РЅРµСЃРєРѕР»СЊРєРѕ)
+    # подсказки для выбора фасовки (если несколько)
     barcode: Optional[str] = None
     supplier_code: Optional[str] = None
 
@@ -431,7 +431,7 @@ async def find_category_path_and_convert(
         return qty_base_start, start_cat
 
     cats = ["MASS", "VOLUME", "LENGTH", "COUNT"]
-    # BFS over categories, depth <= 2 rules (РјРѕР¶РЅРѕ РїРѕРґРЅСЏС‚СЊ РїРѕР·Р¶Рµ)
+    # BFS over categories, depth <= 2 rules (можно поднять позже)
     from collections import deque
     queue = deque()
     queue.append((start_cat, qty_base_start, [] , {start_cat}))  # (cat, qty_base, rule_steps, visited)
@@ -534,8 +534,8 @@ async def convert(
         uoms_by_code: Dict[str, dict] = {}
         uoms_by_id: Dict[int, dict] = {}
         for u in uoms_list:
-            # u["category"] == id РєР°С‚РµРіРѕСЂРёРё; РЅР°Рј РЅСѓР¶РµРЅ code РєР°С‚РµРіРѕСЂРёРё вЂ” РїРѕРґС‚СЏРЅРµРј РѕС‚РґРµР»СЊРЅС‹Рј Р·Р°РїСЂРѕСЃРѕРј РЅРµ Р±СѓРґРµРј.
-            # РџРѕСЌС‚РѕРјСѓ Р±СѓРґРµРј С…СЂР°РЅРёС‚СЊ category_id, Р° category_code Р±СѓРґРµРј РїРѕР»СѓС‡Р°С‚СЊ С‡РµСЂРµР· РѕС‚РґРµР»СЊРЅС‹Р№ РјР°РїРїРёРЅРі.
+            # u["category"] == id категории; нам нужен code категории — подтянем отдельным запросом не будем.
+            # Поэтому будем хранить category_id, а category_code будем получать через отдельный маппинг.
             uoms_by_id[int(u["id"])] = {
                 "id": int(u["id"]),
                 "code": u["code"],
@@ -545,7 +545,7 @@ async def convert(
                 "precision": int(u["precision"]),
             }
 
-        # РЅСѓР¶РЅРѕ РїРѕР»СѓС‡РёС‚СЊ category_code РїРѕ category_id вЂ” Р±РµСЂС‘Рј РёР· uom-categories
+        # нужно получить category_code по category_id — берём из uom-categories
         cats_payload = await nsi_get(client, bearer_token, "/api/v1/uom-categories/")
         cats_list = _unwrap_list(cats_payload)
         cat_code_by_id = {int(c["id"]): c["code"] for c in cats_list}
@@ -569,7 +569,7 @@ async def convert(
         except Exception:
             warnings.append("Item density value is invalid and was ignored.")
 
-    # РѕРїСЂРµРґРµР»РёС‚СЊ target uom
+    # определить target uom
     target_uom_code: str
     if req.to_uom:
         target_uom_code = req.to_uom
@@ -580,7 +580,7 @@ async def convert(
             raise HTTPException(status_code=422, detail="Item has no posting_uom in policy")
         target_uom_code = uoms_by_id[int(posting_uom_id)]["code"]
 
-    # РЅР°С‡Р°Р»СЊРЅС‹Рµ РґР°РЅРЅС‹Рµ
+    # начальные данные
     cur_qty = d(req.qty)
     cur_uom = req.from_uom
 
@@ -589,10 +589,10 @@ async def convert(
     if target_uom_code not in uoms_by_code:
         raise HTTPException(status_code=400, detail=f"Unknown to_uom: {target_uom_code}")
 
-    # 1) РµСЃР»Рё from_uom вЂ” СѓРїР°РєРѕРІРєР° (COUNT) Рё РµСЃС‚СЊ С„Р°СЃРѕРІРєР° -> СЂР°Р·СѓРїР°РєРѕРІР°С‚СЊ
+    # 1) если from_uom — упаковка (COUNT) и есть фасовка -> разупаковать
     from_info = uom_info(uoms_by_code, cur_uom)
     if from_info["category_code"] == "COUNT":
-        # РїСЂРѕР±СѓРµРј РїСЂРёРјРµРЅРёС‚СЊ С„Р°СЃРѕРІРєСѓ С‚РѕР»СЊРєРѕ РµСЃР»Рё РµСЃС‚СЊ package spec СЃ СЌС‚РёРј UoM
+        # пробуем применить фасовку только если есть package spec с этим UoM
         try:
             pkg = pick_package(item, cur_uom, req, uoms_by_id, uoms_by_code, on_date)
             pu = uoms_by_id[int(pkg["package_uom"])]
@@ -614,27 +614,27 @@ async def convert(
             cur_uom = cu["code"]
             from_info = uom_info(uoms_by_code, cur_uom)
         except HTTPException as e:
-            # РµСЃР»Рё СѓРїР°РєРѕРІРєР° РЅРµ РЅР°Р№РґРµРЅР° вЂ” РѕСЃС‚Р°РІРёРј РєР°Рє РµСЃС‚СЊ (COUNT РјРѕР¶РµС‚ Р±С‹С‚СЊ РїСЂРѕСЃС‚Рѕ PCS)
+            # если упаковка не найдена — оставим как есть (COUNT может быть просто PCS)
             if e.status_code in (422,):
                 pass
             else:
                 raise
 
-    # 2) РїСЂРёРІРµСЃС‚Рё С‚РµРєСѓС‰СѓСЋ РµРґРёРЅРёС†Сѓ Рє Р±Р°Р·Рµ РµС‘ РєР°С‚РµРіРѕСЂРёРё (KG/L/M/PCS)
+    # 2) привести текущую единицу к базе её категории (KG/L/M/PCS)
     cur_cat = from_info["category_code"]
     if cur_cat not in CATEGORY_BASE_UOM:
         raise HTTPException(status_code=422, detail=f"Unsupported category: {cur_cat}")
     base_uom_code = CATEGORY_BASE_UOM[cur_cat]
     cur_qty_base = convert_within_category(cur_qty, cur_uom, base_uom_code, uoms_by_code, steps)
 
-    # 3) РїСЂРёРІРµСЃС‚Рё target uom Рє Р±Р°Р·Рµ target РєР°С‚РµРіРѕСЂРёРё (С‡С‚РѕР±С‹ Р·РЅР°С‚СЊ target_cat)
+    # 3) привести target uom к базе target категории (чтобы знать target_cat)
     target_info = uom_info(uoms_by_code, target_uom_code)
     target_cat = target_info["category_code"]
     if target_cat not in CATEGORY_BASE_UOM:
         raise HTTPException(status_code=422, detail=f"Unsupported target category: {target_cat}")
     target_base_uom_code = CATEGORY_BASE_UOM[target_cat]
 
-    # 4) РµСЃР»Рё РєР°С‚РµРіРѕСЂРёРё СЂР°Р·РЅС‹Рµ вЂ” РїСЂРёРјРµРЅРёС‚СЊ РїСЂР°РІРёР»Р° С‡РµСЂРµР· NSI match (BFS РґРѕ 2 РїСЂР°РІРёР»)
+    # 4) если категории разные — применить правила через NSI match (BFS до 2 правил)
     if cur_cat != target_cat:
         rule_context = dict(req.context or {})
         if req.supplier_code:
@@ -655,14 +655,14 @@ async def convert(
                 item_density_kg_per_l=item_density_kg_per_l,
             )
 
-    # 5) С‚РµРїРµСЂСЊ cur_qty_base РІ Р±Р°Р·Рµ target РєР°С‚РµРіРѕСЂРёРё; РїРµСЂРµРІРµСЃС‚Рё РІ target uom
-    # СЃРЅР°С‡Р°Р»Р° РІ base uom target_cat (РѕРЅРѕ СѓР¶Рµ base), Р·Р°С‚РµРј РІ target_uom
+    # 5) теперь cur_qty_base в базе target категории; перевести в target uom
+    # сначала в base uom target_cat (оно уже base), затем в target_uom
     if target_base_uom_code != target_uom_code:
         cur_qty_final = convert_within_category(cur_qty_base, target_base_uom_code, target_uom_code, uoms_by_code, steps)
     else:
         cur_qty_final = cur_qty_base
 
-    # 6) РѕРєСЂСѓРіР»РµРЅРёРµ
+    # 6) округление
     precision = int(target_info.get("precision", 3))
     policy = item.get("policy") or {}
     if policy.get("rounding_precision") is not None:

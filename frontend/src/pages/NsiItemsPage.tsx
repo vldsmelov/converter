@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { requestJson } from "../api/request";
@@ -13,13 +13,13 @@ const ACTIONS_WEIGHT = 18;
 
 const ITEM_COLUMNS: ItemColumnDef[] = [
   { key: "id", label: "ID", weight: 7 },
-  { key: "name", label: "РќР°Р·РІР°РЅРёРµ", weight: 30 },
+  { key: "name", label: "Название", weight: 30 },
   { key: "sku", label: "SKU", weight: 12 },
-  { key: "category", label: "РљР°С‚РµРіРѕСЂРёСЏ", weight: 18 },
-  { key: "storage_uom", label: "Р•РґРёРЅРёС†Р° С…СЂР°РЅРµРЅРёСЏ", weight: 12 },
-  { key: "density", label: "РџР»РѕС‚РЅРѕСЃС‚СЊ, РєРі/Р»", weight: 12 },
-  { key: "source", label: "РСЃС‚РѕС‡РЅРёРє", weight: 11 },
-  { key: "active", label: "РђРєС‚РёРІРµРЅ", weight: 10 },
+  { key: "category", label: "Категория", weight: 18 },
+  { key: "storage_uom", label: "Единица хранения", weight: 12 },
+  { key: "density", label: "Плотность, кг/л", weight: 12 },
+  { key: "source", label: "Источник", weight: 11 },
+  { key: "active", label: "Активен", weight: 10 },
 ];
 
 const DEFAULT_VISIBLE_COLUMNS: Record<ItemColumnKey, boolean> = {
@@ -76,7 +76,7 @@ export default function NsiItemsPage() {
   const catDefaultUom = useCallback((id: number | null | undefined) => (id ? (catById.get(id)?.default_uom ?? null) : null), [catById]);
 
   const itemStorageUomId = useCallback((it: any): number | null => {
-    const v = it?.policy?.posting_uom; // РµРґРёРЅРёС†Р° С…СЂР°РЅРµРЅРёСЏ РІ Р±Р°Р·Рµ
+    const v = it?.policy?.posting_uom; // единица хранения в базе
     return typeof v === "number" ? v : null;
   }, []);
 
@@ -159,36 +159,36 @@ export default function NsiItemsPage() {
     const su = itemStorageUomId(it);
     const src = uomSource(it);
     if (key === "id") return <span className="mono-cell">{it.id}</span>;
-    if (key === "name") return <span title={it.name ?? ""}>{it.name ?? "вЂ”"}</span>;
-    if (key === "sku") return <span title={it.sku ?? ""}>{it.sku ?? "вЂ”"}</span>;
+    if (key === "name") return <span title={it.name ?? ""}>{it.name ?? "—"}</span>;
+    if (key === "sku") return <span title={it.sku ?? ""}>{it.sku ?? "—"}</span>;
     if (key === "category") return <span title={catName(it.category)}>{catName(it.category)}</span>;
     if (key === "storage_uom") return <span className="badge">{uomCode(su)}</span>;
     if (key === "density") {
       const raw = it?.density_kg_per_l;
-      return raw == null || raw === "" ? "вЂ”" : String(raw);
+      return raw == null || raw === "" ? "—" : String(raw);
     }
     if (key === "source") {
-      if (src === "default") return <span className="badge">РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ</span>;
-      if (src === "manual") return <span className="badge">РІСЂСѓС‡РЅСѓСЋ</span>;
-      return "вЂ”";
+      if (src === "default") return <span className="badge">по умолчанию</span>;
+      if (src === "manual") return <span className="badge">вручную</span>;
+      return "—";
     }
     if (key === "active") {
       return (
         <span
           className={`nsi-status-icon ${it.is_active ? "active" : "inactive"}`}
-          title={it.is_active ? "РђРєС‚РёРІРЅР°СЏ РїРѕР·РёС†РёСЏ" : "РќРµР°РєС‚РёРІРЅР°СЏ РїРѕР·РёС†РёСЏ"}
-          aria-label={it.is_active ? "РђРєС‚РёРІРЅР°СЏ РїРѕР·РёС†РёСЏ" : "РќРµР°РєС‚РёРІРЅР°СЏ РїРѕР·РёС†РёСЏ"}
+          title={it.is_active ? "Активная позиция" : "Неактивная позиция"}
+          aria-label={it.is_active ? "Активная позиция" : "Неактивная позиция"}
         >
-          {it.is_active ? "вњ“" : "вњ•"}
+          {it.is_active ? "✓" : "✕"}
         </span>
       );
     }
-    return "вЂ”";
+    return "—";
   }
 
   async function remove(id: number) {
     if (!token) return;
-    if (!confirm("РЈРґР°Р»РёС‚СЊ РЅРѕРјРµРЅРєР»Р°С‚СѓСЂРЅСѓСЋ РїРѕР·РёС†РёСЋ?")) return;
+    if (!confirm("Удалить номенклатурную позицию?")) return;
     setErr(null);
     try {
       await requestJson({ method: "DELETE", url: `${import.meta.env.VITE_NSI_BASE_URL}/api/v1/items/${id}/`, token });
@@ -201,12 +201,12 @@ export default function NsiItemsPage() {
   return (
     <div className="card">
       <PageHeader
-        title="РќРЎР: РќРѕРјРµРЅРєР»Р°С‚СѓСЂР°"
-        subtitle="Р•РґРёРЅРёС†Р° С…СЂР°РЅРµРЅРёСЏ РїРѕРєР°Р·С‹РІР°РµС‚, РІ РєР°РєРѕР№ РµРґРёРЅРёС†Рµ РјС‹ С…СЂР°РЅРёРј РєРѕР»РёС‡РµСЃС‚РІРѕ РІ Р±Р°Р·Рµ (РЅР°РїСЂРёРјРµСЂ, Р±РѕР»С‚С‹ вЂ” PCS). РљР°С‚РµРіРѕСЂРёСЏ РІР»РёСЏРµС‚ С‚РѕР»СЊРєРѕ РЅР° РїРѕРґСЃРєР°Р·РєСѓ РїСЂРё СЃРѕР·РґР°РЅРёРё."
+        title="НСИ: Номенклатура"
+        subtitle="Единица хранения показывает, в какой единице мы храним количество в базе (например, болты — PCS). Категория влияет только на подсказку при создании."
         right={
           <>
-            <button className="btn" onClick={load}>РћР±РЅРѕРІРёС‚СЊ</button>
-            <button className="btn primary" onClick={() => nav("/nsi/items/new")}>РЎРѕР·РґР°С‚СЊ РїРѕР·РёС†РёСЋ</button>
+            <button className="btn" onClick={load}>Обновить</button>
+            <button className="btn primary" onClick={() => nav("/nsi/items/new")}>Создать позицию</button>
           </>
         }
       />
@@ -216,37 +216,37 @@ export default function NsiItemsPage() {
       <div className="card" style={{ marginTop: 12 }}>
         <div className="row nsi-items-filter-row">
           <label style={{ flex: 1, minWidth: 260 }}>
-            <small>РџРѕРёСЃРє</small><br />
-            <input value={q} onChange={(e) => setQ(e.target.value)} style={{ width: "100%" }} placeholder="РЅР°РїСЂРёРјРµСЂ: Р±РѕР»С‚" />
+            <small>Поиск</small><br />
+            <input value={q} onChange={(e) => setQ(e.target.value)} style={{ width: "100%" }} placeholder="например: болт" />
           </label>
           <label>
-            <small>РљР°С‚РµРіРѕСЂРёСЏ</small><br />
+            <small>Категория</small><br />
             <select value={catFilter === "all" ? "all" : String(catFilter)} onChange={(e) => {
               const v = e.target.value;
               setCatFilter(v === "all" ? "all" : toNum(v));
             }}>
-              <option value="all">Р’СЃРµ</option>
+              <option value="all">Все</option>
               {cats.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </label>
           <label className="row" style={{ gap: 6 }}>
             <input type="checkbox" checked={onlyManualUom} onChange={(e) => setOnlyManualUom(e.target.checked)} />
-            <small>С‚РѕР»СЊРєРѕ СЃ СЂСѓС‡РЅРѕР№ РµРґРёРЅРёС†РµР№</small>
+            <small>только с ручной единицей</small>
           </label>
           <div className="nsi-items-columns-menu" ref={columnsMenuRef}>
             <button
               type="button"
               className="btn icon-btn"
-              title="РџРѕР»СЏ С‚Р°Р±Р»РёС†С‹"
-              aria-label="РџРѕР»СЏ С‚Р°Р±Р»РёС†С‹"
+              title="Поля таблицы"
+              aria-label="Поля таблицы"
               aria-expanded={columnsMenuOpen}
               onClick={() => setColumnsMenuOpen((v) => !v)}
             >
-              вљ™
+              ⚙
             </button>
             {columnsMenuOpen && (
               <div className="nsi-items-columns-dropdown">
-                <small><strong>РћС‚РѕР±СЂР°Р¶Р°РµРјС‹Рµ РїРѕР»СЏ</strong></small>
+                <small><strong>Отображаемые поля</strong></small>
                 {ITEM_COLUMNS.map((c) => {
                   const checked = visibleColumnsMap[c.key];
                   const isLastVisible = checked && visibleColumnsCount === 1;
@@ -264,7 +264,7 @@ export default function NsiItemsPage() {
                 })}
                 <div className="row" style={{ justifyContent: "flex-end", marginTop: 6 }}>
                   <button className="btn btn-tight" type="button" onClick={() => setVisibleColumnsMap({ ...DEFAULT_VISIBLE_COLUMNS })}>
-                    Р’СЃРµ РїРѕР»СЏ
+                    Все поля
                   </button>
                 </div>
               </div>
@@ -286,7 +286,7 @@ export default function NsiItemsPage() {
               {visibleColumns.map((c) => (
                 <th key={c.key}>{c.label}</th>
               ))}
-              <th className="nsi-actions-col">Р”РµР№СЃС‚РІРёСЏ</th>
+              <th className="nsi-actions-col">Действия</th>
             </tr>
           </thead>
           <tbody>
@@ -300,18 +300,18 @@ export default function NsiItemsPage() {
                     <button
                       className="btn btn-tight nsi-action-icon"
                       onClick={() => nav(`/nsi/items/${it.id}/edit`)}
-                      title="Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ"
-                      aria-label="Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ"
+                      title="Редактировать"
+                      aria-label="Редактировать"
                     >
-                      вњЋ
+                      ✎
                     </button>
                     <button
                       className="btn btn-tight danger nsi-action-icon"
                       onClick={() => remove(it.id)}
-                      title="РЈРґР°Р»РёС‚СЊ"
-                      aria-label="РЈРґР°Р»РёС‚СЊ"
+                      title="Удалить"
+                      aria-label="Удалить"
                     >
-                      рџ—‘
+                      🗑
                     </button>
                   </div>
                 </td>
@@ -320,7 +320,7 @@ export default function NsiItemsPage() {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={visibleColumns.length + 1} className="empty-row">
-                  <small>РќРёС‡РµРіРѕ РЅРµ РЅР°Р№РґРµРЅРѕ.</small>
+                  <small>Ничего не найдено.</small>
                 </td>
               </tr>
             )}
@@ -330,6 +330,5 @@ export default function NsiItemsPage() {
     </div>
   );
 }
-
 
 
