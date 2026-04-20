@@ -84,3 +84,11 @@
 - `frontend-build`: `npm ci && npm run build`
 - `python-smoke`: compile/check python
 - `e2e-smoke`: поднимает compose-контур и гоняет e2e
+
+## 10. VPS (прод, `converter.acom-offer-desk.ru`)
+- **Каталог на сервере (типично):** `/opt/converter`.
+- **Ветка выката:** `test` — сверять с upstream `vldsmelov/converter:test` и с тем, что реально зафиксировано в `origin` на VPS (`git status -sb`, `git rev-parse HEAD`).
+- **Форк для интеграции:** `https://github.com/vvv-web/converter` (на GitHub также есть `main` / `prototype`; операционная линия для выката — `test`, если не оговорено иное).
+- **Публичный URL:** `https://converter.acom-offer-desk.ru/` — смоки health: §4 (`/healthz` на `nsi`, `documents`, `conversion`).
+- **Внутренняя wiki (операционка, не дублировать секреты в Git):** `https://wiki.acom-offer-desk.ru/services/converter`.
+- **Этот runbook в репозитории:** файл `docs/RUNBOOK.md` на ветке `test`. Путь вида `deploy/vps/` с `.env`, nginx и systemd может существовать **только на сервере** и не обязан присутствовать в удалённом дереве `vvv-web/converter` или `vldsmelov/converter` — при расхождении документов опираться на фактический каталог на VPS и эту секцию.
