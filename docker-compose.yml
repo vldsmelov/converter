@@ -1,3 +1,6 @@
+# Локальная разработка: порты на всех интерфейсах — удобно, но не схема для внешнего контура (СБ).
+# Прод / VPS: см. docker-compose.vps.yml и deploy/vps/README.md (форк vvv-web — полигон перед merge в test канона).
+
 services:
   rabbitmq:
     image: rabbitmq:3-management

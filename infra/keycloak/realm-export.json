@@ -1,6 +1,12 @@
 {
   "realm": "uom",
   "enabled": true,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyInitialCounter": 0,
+  "otpPolicyDigits": 6,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyPeriod": 30,
   "roles": {
     "realm": [
       { "name": "nsi.ping" },

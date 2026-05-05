@@ -5,6 +5,19 @@ on:
   pull_request:
 
 jobs:
+  dockerfile-nonroot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # СБ: контейнеры приложений не должны выполняться от root (см. docker-compose.vps.yml / служебку).
+      - name: Проверка USER в Dockerfile сервисов
+        run: |
+          set -euo pipefail
+          for f in services/nsi/Dockerfile services/documents/Dockerfile services/conversion/Dockerfile services/seed/Dockerfile services/e2e/Dockerfile; do
+            grep -qE '^USER[[:space:]]' "$f" || { echo "::error file=$f::Нет директивы USER — процесс будет root."; exit 1; }
+          done
+          echo "OK: non-root USER задан во всех сервисных Dockerfile."
+
   frontend-quality:
     runs-on: ubuntu-latest
     defaults:
@@ -60,6 +73,7 @@ jobs:
   e2e-smoke:
     runs-on: ubuntu-latest
     needs:
+      - dockerfile-nonroot
       - frontend-quality
       - backend-quality
     timeout-minutes: 30

@@ -1,0 +1,28 @@
+# Пример фрагмента для Nginx на хосте (СБ).
+# Идея: TLS терминируется здесь; в Docker уходят только HTTP на 127.0.0.1 — сеть контейнеров не торчит в интернет.
+#
+# Подключение: include в server { ... } или в отдельный sites-enabled файл.
+# Сертификаты и server_name — по политике ИБ (Let's Encrypt / корпоративный ПУЦ).
+
+upstream converter_keycloak {
+    server 127.0.0.1:8080;
+    keepalive 16;
+}
+
+upstream converter_nsi {
+    server 127.0.0.1:8001;
+    keepalive 8;
+}
+
+upstream converter_documents {
+    server 127.0.0.1:8002;
+    keepalive 8;
+}
+
+upstream converter_conversion {
+    server 127.0.0.1:8003;
+    keepalive 8;
+}
+
+# Дальше: location /realms/, /admin/ → converter_keycloak; префиксы API → соответствующие upstream.
+# Точная карта путей должна совпадать с фронтом и Keycloak (см. RUNBOOK).
