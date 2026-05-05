@@ -203,7 +203,7 @@ services:
       NSI_URL: http://nsi:8000
       DOCS_URL: http://documents:8000
       SEED_USERNAME: ${SEED_USERNAME:-operator}
-      SEED_PASSWORD: ${SEED_PASSWORD:?set SEED_PASSWORD}
+      SEED_PASSWORD: ${SEED_PASSWORD:-operator}
       SEED_CLIENT_ID: ${SEED_CLIENT_ID:-uom-cli}
     depends_on:
       - keycloak
