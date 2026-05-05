@@ -12,6 +12,10 @@ _JWKS_URL = os.environ.get("KEYCLOAK_JWKS_URL")
 _ISSUERS_RAW = os.environ.get("KEYCLOAK_ISSUER")
 _ISSUERS = [p.strip() for p in (_ISSUERS_RAW or "").split(",") if p.strip()]
 
+# СБ: см. комментарий в services/nsi/apps/authn/authentication.py
+_JWT_AUDIENCE_RAW = os.environ.get("KEYCLOAK_JWT_AUDIENCE", "").strip()
+_JWT_AUDIENCES = [p.strip() for p in _JWT_AUDIENCE_RAW.split(",") if p.strip()] if _JWT_AUDIENCE_RAW else []
+
 if not _JWKS_URL or not _ISSUERS:
     raise RuntimeError("KEYCLOAK_JWKS_URL and KEYCLOAK_ISSUER must be set")
 
@@ -35,11 +39,18 @@ class KeycloakJWTAuthentication(BaseAuthentication):
 
         try:
             signing_key = _jwks_client.get_signing_key_from_jwt(token).key
+            verify_aud = bool(_JWT_AUDIENCES)
+            audience = (
+                _JWT_AUDIENCES[0]
+                if len(_JWT_AUDIENCES) == 1
+                else (_JWT_AUDIENCES if len(_JWT_AUDIENCES) > 1 else None)
+            )
             claims = jwt.decode(
                 token,
                 signing_key,
                 algorithms=["RS256"],
-                options={"verify_aud": False, "verify_iss": False},
+                audience=audience if verify_aud else None,
+                options={"verify_aud": verify_aud, "verify_iss": False},
             )
             iss = claims.get("iss")
             if iss not in _ISSUERS:

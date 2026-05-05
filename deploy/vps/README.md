@@ -26,8 +26,10 @@ git rev-parse fork/test      # vvv-web
 | `../docker-compose.vps.yml` | Прод-стек: loopback-порты, пины версий образов, без dev bind-mount кода. |
 | `.env.example` | Шаблон переменных; реальный `.env` создаётся на сервере и **не коммитится**. |
 | `nginx/converter-upstreams.conf.example` | Пример upstream на `127.0.0.1` для Nginx на хосте. |
+| `keycloak-import/README.md` | Куда класть prod JSON realm без секретов. |
+| `systemd/converter-autodeploy-test.sh.example` | Пример скрипта pull + compose; **systemd/README.md** — unit/timer. |
 
-Дополнительно: `docs/security-ports.md`, `docs/security-sb-checklist.md`, `infra/keycloak/README-SB.md`.
+Дополнительно: `docs/security-*.md`, `infra/keycloak/README-SB.md`.
 
 ## Быстрый старт на сервере
 

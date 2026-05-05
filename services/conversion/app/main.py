@@ -23,6 +23,10 @@ _ISSUERS_RAW = os.environ["KEYCLOAK_ISSUER"]
 ISSUERS = [p.strip() for p in (_ISSUERS_RAW or "").split(",") if p.strip()]
 NSI_BASE_URL = os.environ["NSI_BASE_URL"].rstrip("/")
 
+# СБ: см. services/nsi/apps/authn/authentication.py
+_JWT_AUDIENCE_RAW = os.environ.get("KEYCLOAK_JWT_AUDIENCE", "").strip()
+_JWT_AUDIENCES = [p.strip() for p in _JWT_AUDIENCE_RAW.split(",") if p.strip()] if _JWT_AUDIENCE_RAW else []
+
 jwks_client = PyJWKClient(JWKS_URL)
 
 CATEGORY_BASE_UOM = {
@@ -131,11 +135,18 @@ def decode_token(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> dict:
     token = creds.credentials
     try:
         signing_key = jwks_client.get_signing_key_from_jwt(token).key
+        verify_aud = bool(_JWT_AUDIENCES)
+        audience = (
+            _JWT_AUDIENCES[0]
+            if len(_JWT_AUDIENCES) == 1
+            else (_JWT_AUDIENCES if len(_JWT_AUDIENCES) > 1 else None)
+        )
         claims = jwt.decode(
             token,
             signing_key,
             algorithms=["RS256"],
-            options={"verify_aud": False, "verify_iss": False},
+            audience=audience if verify_aud else None,
+            options={"verify_aud": verify_aud, "verify_iss": False},
         )
         iss = claims.get("iss")
         if ISSUERS and iss not in ISSUERS:

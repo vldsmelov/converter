@@ -1,0 +1,21 @@
+# Шифрование данных БД (СБ)
+
+## В транзите (сеть)
+
+Рекомендация для прода: **TLS между приложением и PostgreSQL** (`sslmode=require` или `verify-full` в `DATABASE_URL` / параметрах `psycopg`), сертификаты — вне Git, пути в `.env` на сервере.
+
+Пример направления для строки подключения (без реальных паролей):
+
+```text
+postgres://user:pass@host:5432/db?sslmode=require
+```
+
+Сверять с [документацией PostgreSQL](https://www.postgresql.org/docs/current/libpq-ssl.html) для вашей major-версии.
+
+## At-rest (диск)
+
+Варианты: шифрование тома хоста (LUKS / облако по политике), шифрование бэкапов. Решение фиксируется с ИБ; в Git — только описание выбранной модели и процедура ротации ключей (без самих ключей).
+
+## Compose
+
+В `deploy/vps/.env` задавать `NSI_DATABASE_URL` / `DOCUMENTS_DATABASE_URL` уже с нужным `sslmode` после включения TLS на Postgres.

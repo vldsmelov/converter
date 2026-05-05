@@ -104,4 +104,4 @@
 - **Публичный URL:** `https://converter.acom-offer-desk.ru/` — смоки health: §4 (`/healthz` на `nsi`, `documents`, `conversion`).
 - **Прод-стек в Git (форк):** `docker-compose.vps.yml` — loopback-порты и пины образов; шаблон секретов `deploy/vps/.env.example` (боевой `deploy/vps/.env` на сервере, не в Git).
 - **Внутренняя wiki (операционка, не дублировать секреты в Git):** `https://wiki.acom-offer-desk.ru/services/converter`.
-- **СБ — чеклисты:** `docs/security-sb-checklist.md`, `docs/security-ports.md`, `infra/keycloak/README-SB.md`.
+- **СБ — чеклисты:** `docs/security-sb-checklist.md`, `docs/security-ports.md`, `docs/security-api-hardening.md`, `infra/keycloak/README-SB.md`.

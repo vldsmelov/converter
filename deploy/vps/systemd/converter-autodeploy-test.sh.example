@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Пример автодеплоя под ветку test (GitOps). Скопировать на сервер без суффикса .example,
+# выставить права chmod 750, пути поправить под /opt/converter.
+#
+# СБ: скрипт не должен содержать секретов; токены — в переменных окружения unit-файла (не в Git).
+
+set -euo pipefail
+REPO_DIR="${REPO_DIR:-/opt/converter}"
+BRANCH="${BRANCH:-test}"
+
+cd "$REPO_DIR"
+git fetch origin "$BRANCH"
+git checkout "$BRANCH"
+git reset --hard "origin/$BRANCH"
+
+docker compose -f docker-compose.vps.yml --env-file deploy/vps/.env pull
+docker compose -f docker-compose.vps.yml --env-file deploy/vps/.env up -d --build
