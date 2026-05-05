@@ -13,6 +13,7 @@ def _split_csv(v: str) -> list[str]:
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-secret")
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 ALLOWED_HOSTS = _split_csv(os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1"))
+OPENAPI_PUBLIC_ENABLED = os.environ.get("OPENAPI_PUBLIC_ENABLED", "0") == "1"
 
 
 # Application definition

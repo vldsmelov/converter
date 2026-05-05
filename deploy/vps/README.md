@@ -28,6 +28,7 @@ git rev-parse fork/test      # vvv-web
 | `nginx/converter-upstreams.conf.example` | Пример upstream на `127.0.0.1` для Nginx на хосте. |
 | `keycloak-import/README.md` | Куда класть prod JSON realm без секретов. |
 | `systemd/converter-autodeploy-test.sh.example` | Пример скрипта pull + compose; **systemd/README.md** — unit/timer. |
+| `../../scripts/security-sbom-scan.sh` | Локальный/CI запуск SBOM и vulnerability scan через Trivy или Syft+Grype. |
 
 Дополнительно: `docs/security-*.md`, `infra/keycloak/README-SB.md`.
 
@@ -40,3 +41,11 @@ docker compose -f docker-compose.vps.yml up -d --build
 ```
 
 Однократный seed (профиль `bootstrap`): см. комментарии в `docker-compose.vps.yml`.
+
+Перед выкатыванием СБ-изменений без секретов:
+
+```bash
+docker compose -f docker-compose.vps.yml config --format json >/tmp/converter-vps-compose.json
+python .github/scripts/check_vps_compose_security.py /tmp/converter-vps-compose.json deploy/vps/.env.example
+./scripts/security-sbom-scan.sh
+```

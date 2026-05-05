@@ -11,11 +11,12 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-secret")
 
 DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
-
-
 def _split_csv(v: str) -> list[str]:
     return [x.strip() for x in v.split(",") if x.strip()]
+
+
+ALLOWED_HOSTS = _split_csv(os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1"))
+OPENAPI_PUBLIC_ENABLED = os.getenv("OPENAPI_PUBLIC_ENABLED", "0") == "1"
 
 
 INSTALLED_APPS = [

@@ -2,7 +2,7 @@
 
 ## В транзите (сеть)
 
-Рекомендация для прода: **TLS между приложением и PostgreSQL** (`sslmode=require` или `verify-full` в `DATABASE_URL` / параметрах `psycopg`), сертификаты — вне Git, пути в `.env` на сервере.
+Рекомендация для прода: **TLS между приложением и PostgreSQL** (`sslmode=require` или `verify-full` в `DATABASE_URL` / параметрах `psycopg`), сертификаты — вне Git, пути в `.env` на сервере. Этот документ относится только к БД Converter: `keycloak_db`, `nsi_db`, `documents_db`; `order_database` не входит в scope.
 
 Пример направления для строки подключения (без реальных паролей):
 
@@ -18,4 +18,10 @@ postgres://user:pass@host:5432/db?sslmode=require
 
 ## Compose
 
-В `deploy/vps/.env` задавать `NSI_DATABASE_URL` / `DOCUMENTS_DATABASE_URL` уже с нужным `sslmode` после включения TLS на Postgres.
+В `deploy/vps/.env` задавать `NSI_DATABASE_URL` / `DOCUMENTS_DATABASE_URL` уже с нужным `sslmode` после включения TLS на Postgres. `docker-compose.vps.yml` поддерживает эти переменные и по умолчанию остаётся на внутренней docker-сети без публичной публикации Postgres.
+
+Для `keycloak_db` TLS внутри compose-контура требует отдельного provisioning сертификатов PostgreSQL и настроек Keycloak `KC_DB_URL_PROPERTIES`; без подтверждённых сертификатов включать это вслепую нельзя.
+
+## СЗИ / внешние средства защиты
+
+Установка СЗИ — серверное требование ИБ, а не изменение приложения. Перед установкой нужны: название продукта/агента, поддерживаемая ОС и kernel, сетевые назначения агента, список исключений для Docker volumes, процедура rollback. Не устанавливать неизвестное ПО на VPS без отдельного согласования.

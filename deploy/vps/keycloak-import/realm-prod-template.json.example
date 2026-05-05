@@ -1,0 +1,81 @@
+{
+  "realm": "uom",
+  "enabled": true,
+  "otpPolicyType": "totp",
+  "otpPolicyAlgorithm": "HmacSHA1",
+  "otpPolicyInitialCounter": 0,
+  "otpPolicyDigits": 6,
+  "otpPolicyLookAheadWindow": 1,
+  "otpPolicyPeriod": 30,
+  "requiredActions": [
+    {
+      "alias": "CONFIGURE_TOTP",
+      "name": "Configure OTP",
+      "providerId": "CONFIGURE_TOTP",
+      "enabled": true,
+      "defaultAction": true,
+      "priority": 10
+    }
+  ],
+  "roles": {
+    "realm": [
+      { "name": "nsi.ping" },
+      { "name": "documents.ping" },
+      { "name": "conversion.ping" },
+      { "name": "nsi.uom.read" },
+      { "name": "nsi.uom.write" },
+      { "name": "nsi.item.read" },
+      { "name": "nsi.item.write" },
+      { "name": "nsi.package.read" },
+      { "name": "nsi.package.write" },
+      { "name": "nsi.rule.read" },
+      { "name": "nsi.rule.write" },
+      { "name": "nsi.default_field.write" },
+      { "name": "conversion.convert" },
+      { "name": "documents.invoice.read" },
+      { "name": "documents.invoice.write" },
+      { "name": "documents.invoice.calculate" },
+      { "name": "documents.invoice.generate" },
+      { "name": "documents.feedback.read" },
+      { "name": "documents.feedback.write" },
+      { "name": "system.admin" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "uom-cli",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [],
+      "webOrigins": []
+    },
+    {
+      "clientId": "documents-service",
+      "enabled": true,
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": false
+    },
+    {
+      "clientId": "frontend",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "https://converter.acom-offer-desk.ru",
+      "baseUrl": "/",
+      "redirectUris": ["https://converter.acom-offer-desk.ru/*"],
+      "webOrigins": ["https://converter.acom-offer-desk.ru"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    }
+  ],
+  "users": []
+}

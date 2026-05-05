@@ -18,6 +18,28 @@ jobs:
           done
           echo "OK: non-root USER задан во всех сервисных Dockerfile."
 
+  vps-compose-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # СБ: проверяем не текстовый grep, а effective config после подстановки compose defaults.
+      - name: Render VPS Compose effective config
+        env:
+          CONVERTER_FQDN: converter.acom-offer-desk.ru
+          CONVERTER_PUBLIC_ORIGIN: https://converter.acom-offer-desk.ru
+          CONVERTER_KEYCLOAK_ISSUER_PUBLIC: https://converter.acom-offer-desk.ru/auth/realms/uom
+          MINIO_ROOT_PASSWORD: dummy
+          KEYCLOAK_ADMIN: admin
+          KEYCLOAK_ADMIN_PASSWORD: dummy
+          NSI_DJANGO_SECRET_KEY: dummy
+          DOCS_DJANGO_SECRET_KEY: dummy
+          S2S_CLIENT_SECRET: dummy
+        run: docker compose -f docker-compose.vps.yml config --format json > /tmp/converter-vps-compose.json
+      - name: Validate VPS Compose and env example SB invariants
+        run: |
+          set -euo pipefail
+          python .github/scripts/check_vps_compose_security.py /tmp/converter-vps-compose.json deploy/vps/.env.example
+
   frontend-quality:
     runs-on: ubuntu-latest
     defaults:
@@ -56,6 +78,7 @@ jobs:
         working-directory: services/nsi
         run: |
           python manage.py check
+          python manage.py test nsi_service.tests -v 2
           python manage.py makemigrations --check --dry-run
       - name: Django checks (Documents)
         env:
@@ -64,9 +87,17 @@ jobs:
           KEYCLOAK_JWKS_URL: http://localhost/jwks
           DJANGO_SECRET_KEY: ci-secret
           DJANGO_DEBUG: "0"
+          CONVERSION_BASE_URL: http://localhost:8003
+          KEYCLOAK_TOKEN_URL: http://localhost/realms/uom/protocol/openid-connect/token
+          S2S_CLIENT_SECRET: ci-secret
+          MINIO_INTERNAL_ENDPOINT: localhost:9000
+          MINIO_ENDPOINT: localhost:9000
+          MINIO_ACCESS_KEY: minio
+          MINIO_SECRET_KEY: minio
         working-directory: services/documents
         run: |
           python manage.py check
+          python manage.py test documents_service.tests -v 2
           python manage.py makemigrations --check --dry-run
       - run: pytest -q --collect-only services/e2e/tests
 
@@ -74,6 +105,7 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - dockerfile-nonroot
+      - vps-compose-security
       - frontend-quality
       - backend-quality
     timeout-minutes: 30

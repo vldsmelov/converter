@@ -5,11 +5,11 @@
 - [ ] **МЭ:** снаружи только 443 (и редирект 80); `ss`/firewall согласованы.
 - [ ] **SSH:** доступ только с терминального сервера / allowlist.
 - [ ] **GitOps:** `docker-compose.vps.yml` и `deploy/vps/.env.example` в репо; секреты только в `.env` на сервере.
-- [ ] **Keycloak:** 2FA обязателен для нужных ролей; сужены `redirectUris` / `webOrigins` под прод (`infra/keycloak/README-SB.md`).
+- [ ] **Keycloak:** prod compose включает `KC_HOSTNAME_STRICT=true`; 2FA и prod `redirectUris` / `webOrigins` описаны в `infra/keycloak/README-SB.md`, live realm менять через Admin API/Console.
 - [ ] **JWT:** в проде задан `KEYCLOAK_JWT_AUDIENCE`; см. `docs/security-api-hardening.md`.
-- [ ] **OpenAPI / анонимные эндпоинты:** ревью по `docs/security-api-hardening.md`.
-- [ ] **Образы:** не `latest` в прод-контуре; список digest + scan/SBOM по регламенту ИБ.
+- [x] **OpenAPI / Swagger:** prod compose задаёт `OPENAPI_PUBLIC_ENABLED=0`; анонимные бизнес-эндпоинты ещё проверить отдельно.
+- [ ] **Образы:** `latest` убран из prod compose; effective config проверяется в CI; digest resolve/SBOM запускать через `scripts/security-sbom-scan.sh` и `docker compose config --resolve-image-digests` при доступной сети registry.
 - [ ] **Контейнеры:** процесс не root (`USER` в Dockerfile; проверка в CI).
-- [ ] **БД:** TLS к Postgres и/или шифрование томов — по решению ИБ.
+- [ ] **БД/SZI:** TLS/at-rest модель для Converter Postgres описана в `docs/security-db-encryption.md`; установка СЗИ требует данных от ИБ.
 
 Карточки Kaiten и внешний свод требований — по внутренней служебке ИБ.

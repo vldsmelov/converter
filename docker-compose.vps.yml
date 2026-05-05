@@ -7,7 +7,7 @@ name: converter
 
 services:
   rabbitmq:
-    image: rabbitmq:3-management
+    image: rabbitmq:3-management@sha256:e582c0bc7766f3342496d8485efb5a1df782b5ce3886ad017e2eaae442311f69
     restart: unless-stopped
     ports:
       # Loopback-only: удобно для диагностики с хоста, но недоступно напрямую из интернета.
@@ -15,7 +15,7 @@ services:
       - "127.0.0.1:25673:15672"
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     command: server /data --console-address ":9001"
     restart: unless-stopped
     environment:
@@ -29,7 +29,7 @@ services:
       - minio_data:/data
 
   keycloak_db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
     restart: unless-stopped
     environment:
       POSTGRES_DB: keycloak
@@ -39,15 +39,14 @@ services:
       - keycloak_db:/var/lib/postgresql/data
 
   keycloak:
-    image: quay.io/keycloak/keycloak:latest
+    image: quay.io/keycloak/keycloak:26.5.6@sha256:8d44614c74798322c4e07fbe0ecb15cfbb5879d69b484628555f58ade06f0d8c
     restart: unless-stopped
-    # TODO(СБ): после проверки совместимости зафиксировать версию образа и уйти с start-dev.
-    # Сейчас сохраняем рабочий /auth path VPS, чтобы GitOps-переключение было без простоя.
-    command: ["start-dev", "--import-realm", "--http-relative-path=/auth"]
+    # СБ: prod-команда вместо start-dev; /auth сохраняет текущий Nginx route VPS.
+    command: ["start", "--import-realm", "--http-relative-path=/auth"]
     environment:
       KC_HOSTNAME_URL: https://${CONVERTER_FQDN:-converter.acom-offer-desk.ru}/auth
       KC_HOSTNAME_ADMIN_URL: https://${CONVERTER_FQDN:-converter.acom-offer-desk.ru}/auth
-      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT: "true"
       KC_HTTP_RELATIVE_PATH: /auth
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
@@ -67,7 +66,7 @@ services:
       - keycloak_db
 
   nsi_db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
     restart: unless-stopped
     environment:
       POSTGRES_DB: nsi
@@ -77,7 +76,7 @@ services:
       - nsi_db:/var/lib/postgresql/data
 
   documents_db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:4e6e670bb069649261c9c18031f0aded7bb249a5b6664ddec29c013a89310d50
     restart: unless-stopped
     environment:
       POSTGRES_DB: documents
@@ -91,9 +90,10 @@ services:
     restart: unless-stopped
     environment:
       DJANGO_SECRET_KEY: ${NSI_DJANGO_SECRET_KEY:?set NSI_DJANGO_SECRET_KEY}
-      DATABASE_URL: postgres://nsi:nsi@nsi_db:5432/nsi
+      DATABASE_URL: ${NSI_DATABASE_URL:-postgres://nsi:nsi@nsi_db:5432/nsi}
       DJANGO_DEBUG: "0"
-      ALLOWED_HOSTS: "*"
+      ALLOWED_HOSTS: ${CONVERTER_ALLOWED_HOSTS:-converter.acom-offer-desk.ru}
+      OPENAPI_PUBLIC_ENABLED: ${OPENAPI_PUBLIC_ENABLED:-0}
       CORS_ALLOWED_ORIGINS: ${CONVERTER_PUBLIC_ORIGIN:-https://converter.acom-offer-desk.ru}
       KEYCLOAK_ISSUER: ${CONVERTER_KEYCLOAK_ISSUER_PUBLIC:-https://converter.acom-offer-desk.ru/auth/realms/uom}
       KEYCLOAK_JWKS_URL: ${CONVERTER_KEYCLOAK_ISSUER_PUBLIC:-https://converter.acom-offer-desk.ru/auth/realms/uom}/protocol/openid-connect/certs
@@ -120,9 +120,10 @@ services:
     restart: unless-stopped
     environment:
       DJANGO_SECRET_KEY: ${DOCS_DJANGO_SECRET_KEY:?set DOCS_DJANGO_SECRET_KEY}
-      DATABASE_URL: postgres://documents:documents@documents_db:5432/documents
+      DATABASE_URL: ${DOCUMENTS_DATABASE_URL:-postgres://documents:documents@documents_db:5432/documents}
       DJANGO_DEBUG: "0"
-      ALLOWED_HOSTS: "*"
+      ALLOWED_HOSTS: ${CONVERTER_ALLOWED_HOSTS:-converter.acom-offer-desk.ru}
+      OPENAPI_PUBLIC_ENABLED: ${OPENAPI_PUBLIC_ENABLED:-0}
       KEYCLOAK_ISSUER: ${CONVERTER_KEYCLOAK_ISSUER_PUBLIC:-https://converter.acom-offer-desk.ru/auth/realms/uom}
       KEYCLOAK_JWKS_URL: ${CONVERTER_KEYCLOAK_ISSUER_PUBLIC:-https://converter.acom-offer-desk.ru/auth/realms/uom}/protocol/openid-connect/certs
       CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
@@ -157,9 +158,9 @@ services:
     restart: unless-stopped
     environment:
       DJANGO_SECRET_KEY: ${DOCS_DJANGO_SECRET_KEY:?set DOCS_DJANGO_SECRET_KEY}
-      DATABASE_URL: postgres://documents:documents@documents_db:5432/documents
+      DATABASE_URL: ${DOCUMENTS_DATABASE_URL:-postgres://documents:documents@documents_db:5432/documents}
       DJANGO_DEBUG: "0"
-      ALLOWED_HOSTS: "*"
+      ALLOWED_HOSTS: ${CONVERTER_ALLOWED_HOSTS:-converter.acom-offer-desk.ru}
       KEYCLOAK_ISSUER: ${CONVERTER_KEYCLOAK_ISSUER_PUBLIC:-https://converter.acom-offer-desk.ru/auth/realms/uom}
       KEYCLOAK_JWKS_URL: ${CONVERTER_KEYCLOAK_ISSUER_PUBLIC:-https://converter.acom-offer-desk.ru/auth/realms/uom}/protocol/openid-connect/certs
       CELERY_BROKER_URL: amqp://guest:guest@rabbitmq:5672//
