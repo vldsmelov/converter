@@ -12,4 +12,8 @@
 - [ ] **Контейнеры:** процесс не root (`USER` в Dockerfile; проверка в CI).
 - [ ] **БД/SZI:** TLS/at-rest модель для Converter Postgres описана в `docs/security-db-encryption.md`; установка СЗИ требует данных от ИБ.
 
+## Live verification — Keycloak 2FA
+
+- [x] **2026-05-06:** в realm `uom` для пользователя с ролью `operator` без фиксации секретов включён required action `CONFIGURE_TOTP`; ручная проверка QR/OTP на `https://converter.acom-offer-desk.ru/` прошла успешно.
+
 Карточки Kaiten и внешний свод требований — по внутренней служебке ИБ.
