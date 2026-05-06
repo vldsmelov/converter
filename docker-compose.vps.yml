@@ -44,8 +44,8 @@ services:
     # СБ: prod-команда вместо start-dev; /auth сохраняет текущий Nginx route VPS.
     command: ["start", "--import-realm", "--http-relative-path=/auth"]
     environment:
-      KC_HOSTNAME_URL: https://${CONVERTER_FQDN:-converter.acom-offer-desk.ru}/auth
-      KC_HOSTNAME_ADMIN_URL: https://${CONVERTER_FQDN:-converter.acom-offer-desk.ru}/auth
+      KC_HOSTNAME: https://${CONVERTER_FQDN:-converter.acom-offer-desk.ru}/auth
+      KC_HOSTNAME_ADMIN: https://${CONVERTER_FQDN:-converter.acom-offer-desk.ru}/auth
       KC_HOSTNAME_STRICT: "true"
       KC_HTTP_RELATIVE_PATH: /auth
       KC_PROXY_HEADERS: xforwarded
@@ -57,6 +57,8 @@ services:
       KC_DB_PASSWORD: keycloak
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:?set KEYCLOAK_ADMIN}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:?set KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set KEYCLOAK_ADMIN_PASSWORD}
       JAVA_TOOL_OPTIONS: "-Xmx512m -Xms256m"
     ports:
       - "127.0.0.1:18080:8080"
